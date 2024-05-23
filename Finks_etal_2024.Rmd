@@ -1,0 +1,6919 @@
+---
+title: "Phage Lytic Activity During a Vegetarian Diet"
+author: "Sarai S. Finks"
+date: "04/04/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Setting your working directory, warning=FALSE}
+
+getwd()
+setwd("~/your/path/to/data")
+
+```
+
+```{r Load libraries with dependencies, warning=FALSE}
+
+library(agricolae) #version 1.3-7
+library(ape) #Version ‘5.6.2’
+library(BiodiversityR) #version 2.15-4
+library(biomformat) #version 1.26.0
+library(car) #version 3.1-2
+library(conflicted) #version 1.2.0
+library(RColorBrewer) #version 1.1-3
+library(data.table) #version 1.14.10
+library(doBy) #version 4.6.20
+library(dplyr) #version 1.1.4
+library(devtools) #version 2.4.5
+library(decontam) #version 1.18.0
+library(DescTools) #version 0.99.53
+library(EcolUtils) #version 0.1
+library(emmeans) #version 1.9.0
+library(ExPosition) #version 2.8.23
+library(forcats) #version 1.0.0
+library(FSA) #version 0.9.5
+library(gapminder) #version 1.0.0
+library(ggplot2) #version 3.4.4
+library(gplots) #version 
+library(ggpubr) #version 0.6.0
+library(ggpmisc) #version 0.5.5
+library(ggtext) #version 0.1.2
+library(ggridges) #version 0.5.5
+library(gmodels) #version 2.18.1.1
+library(lsmeans) #version 2.20-0
+library(lubridate) #version 1.9.3
+library(nlme) #version 3.1-164
+library(multcompView) #version 0.1-9
+library(pairwiseAdonis) #version 0.4.1
+library(patchwork) #version 1.2.0
+library(purrr) #version 1.0.2
+library(phyloseq) #version 1.42.0
+library(quantmod) #version 0.4.25
+library(qqplotr) #version 0.0.6
+library(readxl) #version 1.4.3
+library(rcompanion) #version 2.4.34
+library(rJava) #version 1.0-10
+library(Rmisc) #version 1.5.1
+library(rstatix) #version 0.7.2
+library(reshape2) #version 1.4.4
+library(scales) #version 1.3.0
+library(stringr) #version 1.5.1
+library(tidyr) #version 1.3.0
+library(tidyverse) #version 2.0.0
+library(usedist) #version 0.4.0
+library(vegan) #version 2.6-4
+library(xlsx) #version 0.6.5
+
+```
+
+```{r Read in phage and bacterial OTU tables, metadata, and phage taxa ids, echo=FALSE}
+
+###Full metadata###
+metadata <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "metadata")
+metadata <-
+  as.data.frame(metadata, col.names = TRUE)
+
+metadata1 <- metadata[-1]
+row.names(metadata1) <- metadata$SRA_run_accession
+sapply(metadata1, class)
+metadata1[1:2, 1:3]
+
+###Bacteria###
+bOTU_raw <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "Table_S7")
+
+bOTU_raw <-
+  as.data.frame(bOTU_raw, col.names = TRUE)
+
+bOTU <- bOTU_raw[-1]
+row.names(bOTU) <- bOTU_raw$...1
+sapply(bOTU, class)
+bOTU[1:2, 1:3]
+
+bOTU <- as.data.frame(bOTU)
+
+###Phageome - VLP dataset###
+vOTU_vlp <- read_excel("~/path/to/metadata.xlsx",
+                       sheet = "Table_S6")
+
+vOTU_vlp <-
+  as.data.frame(vOTU_vlp, col.names	=	TRUE)
+vOTU_vlp[1:2, 1:3]
+vOTU_vlp <- vOTU_vlp[-125, ]#wierd formating change happened
+
+vOTU_vlp1 <- vOTU_vlp[-1]
+row.names(vOTU_vlp1) <- vOTU_vlp$...1
+sapply(vOTU_vlp1, class)
+vOTU_vlp1[1:2, 1:3]
+
+#Read in the OTU taxaids data
+vOTU_taxa <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "Table_S5")
+
+vOTU_taxa <-
+  as.data.frame(vOTU_taxa, col.names = TRUE)
+
+vOTU_taxa1 <- vOTU_taxa[-1]
+row.names(vOTU_taxa1) <- vOTU_taxa$vOTU_id
+sapply(vOTU_taxa1, class)
+vOTU_taxa1[1:2, 1:3]
+
+```
+
+```{r Alpha diversity analyses (Figure S2 and Figure S3), echo=FALSE}
+
+####Phage from VLP dataset###
+rare_perm_votu <-
+  as.data.frame((rrarefy.perm(
+    vOTU_vlp1,
+    sample = 100,
+    n = 100,
+    round.out = T
+  )))
+
+vOTU_curve <- rarecurve(
+  vOTU_vlp1,
+  step = 100,
+  xlab = "Sampling Size of OTU",
+  ylab = "Count of Unique OTU",
+  label = FALSE,
+  bty = "n"
+)
+
+vOTU_rared <-
+  as.data.frame(rare_perm_votu[rowSums(rare_perm_votu) >= 100 - (160 * .1), colSums(rare_perm_votu) >= 1])
+
+#check if the OTU table is rarefied
+rowSums(vOTU_rared[c(1:35),])
+
+#sanity check after running rarrefy.perm
+vOTU_rarecurve <- rarecurve(vOTU_rared, step = 100, label = FALSE)
+
+barplot(
+  sort(rowSums(vOTU_rared)),
+  ylim = c(0, max(rowSums(vOTU_rared))),
+  xlim = c(0, NROW(vOTU_rared)),
+  col = "Blue"
+)
+#!!!Even when sampling to 100 OTU only 67 samples are retained!!!
+vOTU_raredt <- t(vOTU_rared)
+vOTU_raredt <- as.data.frame(vOTU_raredt)
+
+#Phage Taxa Barplots
+#make sure to get the OTU IDs as rows before merging with taxa ids
+vOTU_vlp1t <- t(vOTU_vlp1)
+
+vOTU.taxa.merge <-
+  as.data.frame(merge(vOTU_vlp1t, vOTU_taxa1, by.x = "row.names", by.y = "row.names"))
+row.names(vOTU.taxa.merge) <- vOTU.taxa.merge$Row.names
+vOTU.taxa.merge$Row.names <- NULL #remove column "Row.names"
+
+colSums(vOTU.taxa.merge[, c(1:124)])#check if the data is rarefied or not
+
+phylum.virus <-
+  as.vector(unique(vOTU.taxa.merge$Phylum[!is.na(vOTU.taxa.merge$Phylum)]))
+length(phylum.virus) #6 (all) 6(vlp) phyla
+
+class.virus <-
+  as.vector(unique(vOTU.taxa.merge$Class[!is.na(vOTU.taxa.merge$Class)]))
+length(class.virus) #8 (all) 8(vlp) unique bacterial classes (NA not counted)
+
+order.virus <-
+  as.vector(unique(vOTU.taxa.merge$Order[!is.na(vOTU.taxa.merge$Order)]))
+length(order.virus) #11 (all) 9(vlp) unique bacterial orders (na not counted)
+
+family.virus <-
+  as.vector(unique(vOTU.taxa.merge$Family[!is.na(vOTU.taxa.merge$Family)]))
+length(family.virus) #13 (all) 10 (vlp) unique families (na not counted)
+
+genus.virus <-
+  as.vector(unique(vOTU.taxa.merge$Genus[!is.na(vOTU.taxa.merge$Genus)]))
+length(genus.virus) #22 (all) 21 (vlp) unique bacterial genus' (na not counted)
+
+#aggregate taxonomic IDs on a certain level by sample (here at family level)
+vOTU.family <-
+  aggregate(. ~ Family,
+            data = vOTU.taxa.merge[c(1:(length(names(vOTU.taxa.merge)) - 7), match("Family", names(vOTU.taxa.merge)))],
+            FUN = sum,
+            na.omit = TRUE)
+
+rownames(vOTU.family) <- vOTU.family$Family
+vOTU.family$Family <- NULL
+
+vOTU.family.t <- as.data.frame(t(vOTU.family))
+
+#Merge a metadata column here (I just made my own metadata column)
+vOTU.family.meta1 <-
+  metadata1[c(match(sort(row.names(vOTU.family.t)), sort(row.names(metadata1)))), ]
+
+vOTU.family.meta.merged <-
+  merge(vOTU.family.t,
+        vOTU.family.meta1,
+        by.x = "row.names",
+        by.y = "row.names")
+colnames(vOTU.family.meta.merged)[colnames(vOTU.family.meta.merged) == "Row.names"] <-
+  "SampleID"
+vOTU.family.meta.merged <- as.data.frame(vOTU.family.meta.merged)
+rownames(vOTU.family.meta.merged) <-
+  vOTU.family.meta.merged$SampleID
+vOTU.family.meta.merged$SampleID <- NULL
+
+vOTU.family.agg <-
+  aggregate(vOTU.family.meta.merged[, 1:10],
+            list(vOTU.family.meta.merged$diet_timepoint),
+            mean) #family
+vOTU.family.agg <-
+  as.data.frame(t(vOTU.family.agg)) # transpose table to have variables as columns
+names(vOTU.family.agg) <-
+  as.character(unlist(vOTU.family.agg ["Group.1",])) # transposing causes the treatments named as "Group.1", remove this
+vOTU.family.agg <- vOTU.family.agg[-1, ] #final removal of "Group.1"
+vOTU.family.agg$missing <- NULL
+
+for (i in c(1:ncol(vOTU.family.agg))) {
+  vOTU.family.agg[, i] <-
+    as.numeric(as.character(vOTU.family.agg[, i]))
+}
+
+totalvOTUs.family <- colSums(vOTU.family.agg)
+
+avgnumseqs.vOTU.family <-
+  sum(totalvOTUs.family) / 10 #13/10 is the total number of unique family with NA removed for all versus vlp community
+
+#CHECK FOR THE MOST ABUNDANT classification level HERE!!!!
+sumsum.virus.family <-
+  colSums(vOTU.family.agg[1:(length(names(vOTU.family.agg)) - 0)])
+samp.virus.family <-
+  names(vOTU.family.agg)[1:(length(names(vOTU.family.agg)) - 0)]
+
+vOTU.family.names <-
+  data.frame(Name = rownames(vOTU.family.agg), vOTU.family.agg)
+
+#change day_.1 to day_-1
+names(vOTU.family.names)[names(vOTU.family.names) == 'day_.1'] <-
+  'day_-1'
+
+vOTU.time.long <-
+  reshape2::melt(
+    vOTU.family.names,
+    id.var = "Name",
+    measure.vars = c(
+      "day_-1",
+      "day_0",
+      "day_1",
+      "day_2",
+      "day_3",
+      "day_4",
+      "day_5",
+      "day_6"
+    )
+  )
+
+vOTU.time.long$Abundance <-
+  ifelse(
+    vOTU.time.long$variable == samp.virus.family[1],
+    vOTU.time.long$value / sumsum.virus.family[1],
+    ifelse(
+      vOTU.time.long$variable == samp.virus.family[2],
+      vOTU.time.long$value / sumsum.virus.family[2],
+      ifelse(
+        vOTU.time.long$variable == samp.virus.family[3],
+        vOTU.time.long$value / sumsum.virus.family[3],
+        ifelse(
+          vOTU.time.long$variable == samp.virus.family[4],
+          vOTU.time.long$value / sumsum.virus.family[4],
+          ifelse(
+            vOTU.time.long$variable == samp.virus.family[5],
+            vOTU.time.long$value / sumsum.virus.family[5],
+            ifelse(
+              vOTU.time.long$variable == samp.virus.family[6],
+              vOTU.time.long$value / sumsum.virus.family[6],
+              ifelse(
+                vOTU.time.long$variable == samp.virus.family[7],
+                vOTU.time.long$value / sumsum.virus.family[7],
+                ifelse(
+                  vOTU.time.long$variable == samp.virus.family[8],
+                  vOTU.time.long$value / sumsum.virus.family[8],
+                  "NA"
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+vOTU.time.long$Abundance <- as.numeric(vOTU.time.long$Abundance)
+
+# Checking to make sure it adds to 1 precisely
+for (i in 1:length(samp.virus.family)) {
+  print(
+    paste0(
+      "For diet timepoint",
+      samp.virus.family[i],
+      " the relative abundance adds to: ",
+      sum(vOTU.time.long[vOTU.time.long$variable == samp.virus.family[i], ]$Abundance),
+      "."
+    )
+  )
+}
+
+#Since so Caudovirecetes is largely present in the data need to subtract there abundance -90 then adjust via x-axis in adobe.
+
+vOTU.time.long <- as.data.frame(vOTU.time.long)
+vOTU.time.long <-
+  read.table(file = 'vOTU_stacked_vlp.tsv', sep = '\t', header = TRUE)
+vOTU.time.long <- as.data.frame(vOTU.time.long)
+vOTU.time.long$X <- NULL
+
+#to put other genera at top of barplot
+vOTU.time.long$Name <- factor(vOTU.time.long$Name)
+vOTU.time.long$Name = with(vOTU.time.long, reorder(Name, Abundance))
+
+c10 <- c(
+  "#47388a",
+  "#6fb24b",
+  "#c35133",
+  "#9e7fd0",
+  "#43c8ac",
+  "#ac4c3d",
+  "#5291d6",
+  "#c88d35",
+  "#6e8a39",
+  "#b38044"
+)
+
+figureS2A <-
+  ggplot(vOTU.time.long,
+         aes(
+           x = fct_relevel(
+             variable,
+             "day_-1",
+             "day_0",
+             "day_1",
+             "day_2",
+             "day_3",
+             "day_4",
+             "day_5",
+             "day_6"
+           ),
+           y = Abundance,
+           fill = Name
+         )) +
+  theme_test() +
+  geom_bar(stat = "identity", width = 0.7) +
+  theme(axis.line.x = element_line(colour = "black"),
+        axis.line.y = element_line(colour = "black")) +
+  scale_fill_manual(values = c10) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(fill = "Name") +
+  theme(legend.position = "none") + #Change to "right" to display legend at the right of the plot
+  guides(size = "none") +
+  labs(x = "Diet Timepoint", y = "Proportion of Gut Viral Community")
+
+plot(figureS2A)
+
+#Phage alpha diversity metrics
+phage_richness <-
+  estimateR(vOTU_vlp1) #calculate richness and Chao1
+
+phage_evenness <-
+  diversity(vOTU_vlp1) / log(specnumber(vOTU_vlp1)) #calculates Pielou's (Evenness)
+
+phage_shannon <-
+  diversity(vOTU_vlp1, index = "shannon") #calculates Shannon index
+
+phage_alphadiv <-
+  cbind(t(phage_richness), phage_shannon, phage_evenness) #combine all indices in one data table
+
+phage_alphadiv <- as.data.frame(phage_alphadiv)
+
+#read in combined alpha metrics with merged metadata
+phage_alphadiv <-
+  read_excel("~/Google Drive/My Drive/work/psu/vmi/phageome.xlsx",
+             sheet = "phage_alpha_vlp")
+
+phage_alphadiv <-
+  as.data.frame(phage_alphadiv, col.names = TRUE)
+
+figureS3A <-
+  ggplot(phage_alphadiv,
+         aes(
+           x = fct_relevel(
+             diet_timepoint,
+             "day_-1",
+             "day_0",
+             "day_1",
+             "day_2",
+             "day_3",
+             "day_4",
+             "day_5",
+             "day_6"
+           ),
+           y = phage_shannon
+         )) +
+  geom_boxplot(
+    fill = c(
+      "#738dcc",
+      "#738dcc",
+      "#75a046",
+      "#75a046",
+      "#75a046",
+      "#75a046",
+      "#738dcc",
+      "#738dcc"
+    ),
+    size = 0.5
+  ) +
+  geom_dotplot(
+    binaxis = 'y',
+    stackdir = 'center',
+    binwidth = .05,
+    position = position_dodge(0.75),
+    dotsize = 0.01
+  ) +
+  scale_y_continuous(limits = c(3.25, 6.75),
+                     breaks = seq(3.00, 6.75, by = 0.25)) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Phage Shannon Diversity') +
+  geom_point()
+
+figureS3A
+
+#Test each group for normality
+phage_alphadiv %>%
+  group_by(diet_timepoint) %>%
+  summarise(
+    `W Stat` = shapiro.test(phage_shannon)$statistic,
+    p.value = shapiro.test(phage_shannon)$p.value
+  )
+
+kruskal.test(S.obs ~ diet_stage, data = phage_alphadiv)
+kruskal.test(phage_shannon ~ diet_stage, data = phage_alphadiv)
+kruskal.test(S.chao1 ~ diet_stage, data = phage_alphadiv)
+kruskal.test(phage_evenness ~ diet_stage, data = phage_alphadiv)
+
+#Perform QQ plots by group
+ggplot(
+  data = phage_alphadiv,
+  mapping = aes(
+    sample = phage_shannon,
+    color = diet_timepoint,
+    fill = diet_timepoint
+  )
+) +
+  stat_qq_band(
+    alpha = 0.5,
+    conf = 0.95,
+    qtype = 1,
+    bandType = "boot"
+  ) +
+  stat_qq_line(identity = TRUE) +
+  stat_qq_point(col = "black") +
+  facet_wrap( ~ diet_timepoint, scales = "free") +
+  labs(x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_bw()
+
+#Perform the Mann-Whitney U test average of each diet timepoint to day-1
+phage_alphadiv_sub0 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_0'), ]
+
+phage_alphadiv_sub1 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_1'), ]
+
+phage_alphadiv_sub2 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_2'), ]
+
+phage_alphadiv_sub3 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_3'), ]
+
+phage_alphadiv_sub4 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_4'), ]
+
+phage_alphadiv_sub5 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_5'), ]
+
+phage_alphadiv_sub6 <-
+  phage_alphadiv[phage_alphadiv$diet_timepoint %in% c('day_-1', 'day_6'), ]
+
+m2 <-
+  wilcox.test(
+    S.obs ~ diet_timepoint,
+    data = phage_alphadiv_sub6,
+    p.adjust.method = "holm",
+    na.rm = TRUE,
+    paired = FALSE,
+    exact = FALSE,
+    conf.int = TRUE
+  )
+print(m2)
+
+#Performing the Kolmogorov-Smirnov Tests to determine the distribution of shannon diversity is different over diet timepoint
+
+#one-sample
+ks.phage.all <-
+  ks.test(phage_alphadiv$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.all
+ks.phage.0 <-
+  ks.test(phage_alphadiv_sub0$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.0
+ks.phage.1 <-
+  ks.test(phage_alphadiv_sub1$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.1
+ks.phage.2 <-
+  ks.test(phage_alphadiv_sub2$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.2
+ks.phage.3 <-
+  ks.test(phage_alphadiv_sub3$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.3
+ks.phage.4 <-
+  ks.test(phage_alphadiv_sub4$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.4
+ks.phage.5 <-
+  ks.test(phage_alphadiv_sub5$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.5
+ks.phage.6 <-
+  ks.test(phage_alphadiv_sub6$phage_shannon, "pnorm", exact = TRUE)
+ks.phage.6
+
+#two-sample K-S test
+ks.two1 <-
+  ks.test(phage_alphadiv_sub0$S.obs, phage_alphadiv_sub1$S.obs)
+ks.two1
+
+ks.two2 <-
+  ks.test(phage_alphadiv_sub1$S.obs, phage_alphadiv_sub2$S.obs)
+ks.two2
+
+ks.two3 <-
+  ks.test(phage_alphadiv_sub2$S.obs, phage_alphadiv_sub3$S.obs)
+ks.two3
+
+ks.two4 <-
+  ks.test(phage_alphadiv_sub3$S.obs, phage_alphadiv_sub4$S.obs)
+ks.two4
+
+ks.two5 <-
+  ks.test(phage_alphadiv_sub4$S.obs, phage_alphadiv_sub5$S.obs)
+ks.two5
+
+ks.two6 <-
+  ks.test(phage_alphadiv_sub5$S.obs, phage_alphadiv_sub6$S.obs)
+ks.two6
+
+###Bacteria###
+rare_perm_botu <-
+  rrarefy.perm(bOTU,
+               sample = 5000,
+               n = 100,
+               round.out = T)
+
+bOTU_curve <- rarecurve(
+  bOTU,
+  step = 1000,
+  xlab = "Sampling Size of OTU",
+  ylab = "Count of Unique OTU",
+  label = TRUE,
+  bty = "n"
+)
+
+bOTU_rared <-
+  rare_perm_botu[rowSums(rare_perm_botu) >= 5000 - (5600 * .1), colSums(rare_perm_botu) >= 1]
+
+bOTU_rared <- as.data.frame(bOTU_rared)
+
+#sanity check after running rarrefy.perm
+bOTU_rare_curve <- rarecurve(bOTU_rared, step = 1000, label = FALSE)
+
+barplot(
+  sort(rowSums(bOTU_rared)),
+  ylim = c(0, max(rowSums(bOTU_rared))),
+  xlim = c(0, NROW(bOTU_rared)),
+  col = "Blue"
+)
+
+###Bacterial Taxa Barplots###
+#check if the OTU table is rarefied
+rowSums(bOTU_rared[c(1:194), ])
+
+#Merge metadata so with OTU to calculate abundances by diet-time point
+bOTU.merged <-
+  as.data.frame(merge(metadata1, bOTU_rared, by.x = "row.names", by.y = "row.names"))
+row.names(bOTU.merged) <-
+  bOTU.merged$Row.names #move column "Row.names" (first column) to row.names this was created during the merge
+bOTU.merged$Row.names <- NULL #remove column "Row.names"
+bOTU.merged.sub <-
+  subset(bOTU.merged, select = c(20:79, 1:19)) #move Taxa information to the end of all columns
+
+#Aggregate OTU by diet-timepoint (here at Genus level)
+bOTU.time <-
+  aggregate(. ~ diet_timepoint,
+            data = bOTU.merged.sub[c(1:(length(names(bOTU.merged.sub)) - 19), match("diet_timepoint", names(bOTU.merged.sub)))],
+            FUN = sum,
+            na.omit = TRUE)
+
+#Diet timepoint column is turned into row names and the empty cell is called "null"
+rownames(bOTU.time) <- bOTU.time$diet_timepoint
+bOTU.time$diet_timepoint <- NULL
+
+#Transpose table to have variables as columns
+bOTU.time.t <- as.data.frame(t(bOTU.time))
+
+#Make sure class of OTU counts in numeric
+for (i in c(1:ncol(bOTU.time.t))) {
+  bOTU.time.t[, i] <- as.numeric(as.character(bOTU.time.t[, i]))
+}
+lapply(bOTU.time.t, class)
+
+#Calculating the sums of OTU
+sumsum <- colSums(bOTU.time.t[1:(length(names(bOTU.time.t)) - 0)])
+
+samp <- names(bOTU.time.t)[1:(length(names(bOTU.time.t)) - 0)]
+
+#Since the row names correspond to the OTU in this case Genera names from Gottcha2 need to set a column with the variable that will be used to reformat the table in order to calculate relative abundances of each genus from the rarefied read counts. Note: day_-1 got changed to "day_.1"
+bOTU.time.names <-
+  data.frame(Name = rownames(bOTU.time.t), bOTU.time.t)
+
+#Change day_.1 to day_-1
+names(bOTU.time.names)[names(bOTU.time.names) == 'day_.1'] <-
+  'day_-1'
+
+bOTU.time.long <-
+  reshape2::melt(
+    bOTU.time.names,
+    id.var = "Name",
+    measure.vars = c(
+      "day_-1",
+      "day_0",
+      "day_1",
+      "day_2",
+      "day_3",
+      "day_4",
+      "day_5",
+      "day_6"
+    )
+  )
+
+bOTU.time.long$Abundance <-
+  ifelse(
+    bOTU.time.long$variable == samp[1],
+    bOTU.time.long$value / sumsum[1],
+    ifelse(
+      bOTU.time.long$variable == samp[2],
+      bOTU.time.long$value / sumsum[2],
+      ifelse(
+        bOTU.time.long$variable == samp[3],
+        bOTU.time.long$value / sumsum[3],
+        ifelse(
+          bOTU.time.long$variable == samp[4],
+          bOTU.time.long$value / sumsum[4],
+          ifelse(
+            bOTU.time.long$variable == samp[5],
+            bOTU.time.long$value / sumsum[5],
+            ifelse(
+              bOTU.time.long$variable == samp[6],
+              bOTU.time.long$value / sumsum[6],
+              ifelse(
+                bOTU.time.long$variable == samp[7],
+                bOTU.time.long$value / sumsum[7],
+                ifelse(
+                  bOTU.time.long$variable == samp[8],
+                  bOTU.time.long$value / sumsum[8],
+                  "NA"
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+#Call everything below 0.01 (1%) "other_genera"
+bOTU.time.long$Name[bOTU.time.long$Abundance < 0.01] <-
+  bOTU.time.long$Name["other_genera"]
+
+#Turn all genera that are below 1% first into "NA" then into "other_genera"
+bOTU.time.long$Name <- as.character(bOTU.time.long$Name)
+bOTU.time.long$Name[is.na(bOTU.time.long$Name)] <- "other_genera"
+bOTU.time.long$Abundance <- as.numeric(bOTU.time.long$Abundance)
+
+#Checking to make sure it adds to 1 precisely
+for (i in 1:length(samp)) {
+  print(paste0(
+    "For diet timepoint",
+    samp[i],
+    " the relative abundance adds to: ",
+    sum(bOTU.time.long[bOTU.time.long$variable == samp[i],]$Abundance),
+    "."
+  ))
+}
+
+#Put 'other_genera' at top of barplot
+bOTU.time.long$Name <- factor(bOTU.time.long$Name)
+bOTU.time.long$Name = with(bOTU.time.long, reorder(Name,-Abundance))
+bOTU.time.long$Name <- relevel(bOTU.time.long$Name, 'other_genera')
+
+c49 <- c(
+  "#c8c9c9",
+  "#c27e32",
+  "#577ceb",
+  "#a6bc3a",
+  "#5452b6",
+  "#90b84b",
+  "#923d9a",
+  "#5aaf4e",
+  "#dc69c4",
+  "#42c87f",
+  "#b9286e",
+  "#43c8ac",
+  "#eb5a98",
+  "#78c380",
+  "#48307e",
+  "#c1a830",
+  "#8c7ce2",
+  "#d6902c",
+  "#629de6",
+  "#a53c15",
+  "#5568b2",
+  "#c5ac4f",
+  "#b47bda",
+  "#587e26",
+  "#852a74",
+  "#408848",
+  "#c43b60",
+  "#255719",
+  "#d47abd",
+  "#b3bf6c",
+  "#7b1f4f",
+  "#7e7225",
+  "#be85d0",
+  "#8f541e",
+  "#d271a3",
+  "#d59259",
+  "#a83e6a",
+  "#e26c46",
+  "#e2769a",
+  "#782914",
+  "#db6f81",
+  "#8c242e",
+  "#d5775e",
+  "#8a293f",
+  "#dd4e4f",
+  "#d26c69",
+  "#a3332d",
+  "#d74d5e",
+  "#72a553"
+  
+)
+
+Figure_S2B <-
+  ggplot(bOTU.time.long,
+         aes(
+           x = fct_relevel(
+             variable,
+             "day_-1",
+             "day_0",
+             "day_1",
+             "day_2",
+             "day_3",
+             "day_4",
+             "day_5",
+             "day_6"
+           ),
+           y = Abundance,
+           fill = Name
+         )) +
+  theme_test() +
+  geom_bar(stat = "identity", width = 0.7) +
+  theme(axis.line.x = element_line(colour = "black"),
+        axis.line.y = element_line(colour = "black")) +
+  scale_fill_manual(values = c49) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(fill = "Name") +
+  theme(legend.position = "none") + #Change to "right" to display legend at the right of the plot
+  guides(size = "none") +
+  labs(x = "Diet Timepoint", y = "Proportion of Gut Bacterial Community")
+
+plot(figureS2B)
+
+#combined stacked taxa barplot
+figureS2 <-
+  ggarrange(
+    figureS2A,
+    figureS2B,
+    labels = c("A.", "B."),
+    align = "v",
+    ncol = 1,
+    nrow = 2,
+    widths = c(10, 10)
+  )
+plot(Figure_S2B)
+
+#Bacterial alpha diversity metrics
+bact_richness <-
+  estimateR(bOTU_rared) #calculate richness and Chao
+
+bact_evenness <-
+  diversity(bOTU_rared) / log(specnumber(bOTU_rared)) #calculates Pielou's (Evenness)
+
+bact_shannon <-
+  diversity(bOTU_rared, index = "shannon") #calculates Shannon index
+
+bact_alphadiv <-
+  cbind(t(bact_richness), bact_shannon, bact_evenness) #combine all indices in one data table
+
+bact_alphadiv <- as.data.frame(bact_alphadiv)
+
+#Read in combined alpha metrics with merged metadata
+bact_alphadiv <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "Table_S9")
+
+bact_alphadiv <-
+  as.data.frame(bact_alphadiv, col.names = TRUE)
+
+Figure_S3B <-
+  ggplot(bact_alphadiv,
+         aes(x = diet_timepoint,
+             y = bact_shannon)) +
+  geom_boxplot(
+    fill = c(
+      "#738dcc",
+      "#738dcc",
+      "#75a046",
+      "#75a046",
+      "#75a046",
+      "#75a046",
+      "#738dcc",
+      "#738dcc"
+    ),
+    size = 0.5
+  ) +
+  geom_dotplot(
+    binaxis = 'y',
+    stackdir = 'center',
+    binwidth = .05,
+    position = position_dodge(0.75),
+    dotsize = 0.01
+  ) +
+  scale_y_continuous(limits = c(0.5, 2.50),
+                     breaks = seq(0.5, 2.50, by = 0.25)) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Bacterial Shannon Diversity') +
+  geom_point()
+
+Figure_S3B
+
+#Test each group for normality
+bact_alphadiv %>%
+  group_by(diet_timepoint) %>%
+  summarise(
+    `W Stat` = shapiro.test(bact_shannon)$statistic,
+    p.value = shapiro.test(bact_shannon)$p.value
+  )
+
+#Perform QQ plots by group
+ggplot(
+  data = bact_alphadiv,
+  mapping = aes(
+    sample = bact_shannon,
+    color = diet_timepoint,
+    fill = diet_timepoint
+  )
+) +
+  stat_qq_band(
+    alpha = 0.5,
+    conf = 0.95,
+    qtype = 1,
+    bandType = "boot"
+  ) +
+  stat_qq_line(identity = TRUE) +
+  stat_qq_point(col = "black") +
+  facet_wrap(~ diet_timepoint, scales = "free") +
+  labs(x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_bw()
+
+#Perform the Mann-Whitney U test average of each diet timepoint to day-1
+bact_alphadiv_sub0 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_0'),]
+
+bact_alphadiv_sub1 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_1'),]
+
+bact_alphadiv_sub2 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_2'),]
+
+bact_alphadiv_sub3 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_3'),]
+
+bact_alphadiv_sub4 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_4'),]
+
+bact_alphadiv_sub5 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_5'),]
+
+bact_alphadiv_sub6 <-
+  bact_alphadiv[bact_alphadiv$diet_timepoint %in% c('day_-1', 'day_6'),]
+
+m1 <-
+  wilcox.test(
+    bact_shannon ~ stage.group,
+    data = bact_alphadiv,
+    p.adjust.method = "holm",
+    na.rm = TRUE,
+    paired = FALSE,
+    exact = FALSE,
+    conf.int = TRUE
+  )
+print(m1)
+
+#Testing alpha diversity metrics across diet time points and categories the VLP subset data
+kruskal.test(S.obs ~ diet_stage, data = bact_alphadiv)
+kruskal.test(bact_shannon ~ diet_stage, data = bact_alphadiv)
+kruskal.test(S.chao1 ~ diet_stage, data = bact_alphadiv)
+kruskal.test(bact_evenness ~ diet_stage, data = bact_alphadiv)
+
+#Performing the Kolmogorov-Smirnov Tests to determine the distribution of shannon diversity is different over diet timepoint
+
+#one-sample K-S tests
+ks.bact.all <-
+  ks.test(bact_alphadiv$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.all
+ks.bact.0 <-
+  ks.test(bact_alphadiv_sub0$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.0
+ks.bact.1 <-
+  ks.test(bact_alphadiv_sub1$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.1
+ks.bact.2 <-
+  ks.test(bact_alphadiv_sub2$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.2
+ks.bact.3 <-
+  ks.test(bact_alphadiv_sub3$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.3
+ks.bact.4 <-
+  ks.test(bact_alphadiv_sub4$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.4
+ks.bact.5 <-
+  ks.test(bact_alphadiv_sub5$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.5
+ks.bact.6 <-
+  ks.test(bact_alphadiv_sub6$bact_shannon, "pnorm", exact = TRUE)
+ks.bact.6
+
+#two-sample K-S test
+ks.bact.two1 <-
+  ks.test(bact_alphadiv_sub0$S.obs, bact_alphadiv_sub1$S.obs)
+ks.bact.two1
+
+ks.bact.two2 <-
+  ks.test(bact_alphadiv_sub1$S.obs, bact_alphadiv_sub2$S.obs)
+ks.bact.two2
+
+ks.bact.two3 <-
+  ks.test(bact_alphadiv_sub2$S.obs, bact_alphadiv_sub3$S.obs)
+ks.bact.two3
+
+ks.bact.two4 <-
+  ks.test(bact_alphadiv_sub3$S.obs, bact_alphadiv_sub4$S.obs)
+ks.bact.two4
+
+ks.bact.two5 <-
+  ks.test(bact_alphadiv_sub4$S.obs, bact_alphadiv_sub5$S.obs)
+ks.bact.two5
+
+ks.bact.two6 <-
+  ks.test(bact_alphadiv_sub5$S.obs, bact_alphadiv_sub6$S.obs)
+ks.bact.two6
+
+#Line plots with participants trending up in alpha diversity
+
+c04 <- c("#9c4c72",
+         "#a19ae1",
+         "#e385a9",
+         "#aa4a2a")
+
+
+Figure_S3C <-
+  ggplot(
+    subset(phage_alphadiv,
+           subject_id %in% c("v01",
+                             "v26",
+                             "v29",
+                             "v33")),
+    aes(
+      x = diet_timepoint,
+      y = phage_shannon,
+      group = subject_id,
+      color = subject_id
+    )
+  ) +
+  geom_line() +
+  geom_point(size = 3) +
+  scale_y_continuous(limits = c(3.25, 6.75),
+                     breaks = seq(3.00, 6.75, by = 0.25)) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  scale_fill_manual(values = c04) +
+  coord_cartesian(clip = 'off') +
+  theme(legend.position = "none") +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Phage Shannon Diversity (up)')
+
+Figure_S3C
+
+Figure_S3D <-
+  ggplot(
+    subset(bact_alphadiv,
+           subject_id %in% c("mb01",
+                             "mb26",
+                             "mb29",
+                             "mb33")),
+    aes(
+      x = diet_timepoint,
+      y = bact_shannon,
+      group = subject_id,
+      color = subject_id
+    )
+  ) +
+  geom_line() +
+  geom_point(size = 3) +
+  scale_y_continuous(limits = c(0.5, 2.50),
+                     breaks = seq(0.5, 2.50, by = 0.25)) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  scale_fill_manual(values = c04) +
+  coord_cartesian(clip = 'off') +
+  theme(legend.position = "none") +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Bact Shannon Diversity (up)')
+
+Figure_S3D
+
+#Line plots with participants trending down in alpha diversity
+
+c03 <- c("#9558ce",
+         "#65cba6",
+         "#a93d53")
+
+Figure_S3E <-
+  ggplot(
+    subset(phage_alphadiv,
+           subject_id %in% c("v03",
+                             "v10",
+                             "v31")),
+    aes(
+      x = diet_timepoint,
+      y = phage_shannon,
+      group = subject_id,
+      color = subject_id
+    )
+  ) +
+  geom_line() +
+  geom_point(size = 3) +
+  scale_y_continuous(limits = c(3.25, 6.75),
+                     breaks = seq(3.00, 6.75, by = 0.25)) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  scale_fill_manual(values = c03) +
+  coord_cartesian(clip = 'off') +
+  theme(legend.position = "right") +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Phage Shannon Diversity (down)')
+
+Figure_S3E
+
+Figure_S3F <-
+  ggplot(
+    subset(bact_alphadiv,
+           subject_id %in% c("mb03",
+                             "mb10",
+                             "mb31")),
+    aes(
+      x = diet_timepoint,
+      y = bact_shannon,
+      group = subject_id,
+      color = subject_id
+    )
+  ) +
+  geom_line() +
+  geom_point(size = 3) +
+  scale_y_continuous(limits = c(0.5, 2.50),
+                     breaks = seq(0.5, 2.50, by = 0.25)) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  scale_fill_manual(values = c03) +
+  coord_cartesian(clip = 'off') +
+  theme(legend.position = "right") +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Bacteria Shannon Diversity (down)')
+
+Figure_S3F
+
+#Line plots with participants uncertain trends in alpha diversity
+
+c12 <- c(
+  "#b6c234",
+  "#5d70de",
+  "#3f9130",
+  "#ce59c4",
+  "#53c873",
+  "#d6418d",
+  "#de455c",
+  "#da532f",
+  "#4dbcdf",
+  "#cd85ce",
+  "#5ca86c",
+  "#3c9779"
+)
+
+Figure_S3G <-
+  ggplot(
+    subset(
+      phage_alphadiv,
+      subject_id %in% c(
+        "v04",
+        "v05",
+        "v06",
+        "v07",
+        "v08",
+        "v09",
+        "v11",
+        "v13",
+        "v14",
+        "v24",
+        "v30",
+        "v32"
+      )
+    ),
+    aes(
+      x = diet_timepoint,
+      y = phage_shannon,
+      group = subject_id,
+      color = subject_id
+    )
+  ) +
+  geom_line() +
+  geom_point(size = 3) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  scale_fill_manual(values = c12) +
+  scale_y_continuous(limits = c(3.25, 6.75),
+                     breaks = seq(3.00, 6.75, by = 0.25)) +
+  coord_cartesian(clip = 'off') +
+  theme(legend.position = "right") +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Phage Shannon Diversity')
+
+
+Figure_S3G
+
+Figure_S3H <-
+  ggplot(
+    subset(
+      bact_alphadiv,
+      subject_id %in% c(
+        "mb04",
+        "mb05",
+        "mb06",
+        "mb07",
+        "mb08",
+        "mb09",
+        "mb11",
+        "mb13",
+        "mb14",
+        "mb24",
+        "mb30",
+        "mb32"
+      )
+    ),
+    aes(x = diet_timepoint,
+        y = bact_shannon,
+        group = subject_id),
+    color = subject_id
+  ) +
+  geom_line() +
+  geom_point(size = 3) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  ) +
+  scale_fill_manual(values = c12) +
+  scale_y_continuous(limits = c(0.5, 2.50),
+                     breaks = seq(0.5, 2.50, by = 0.25)) +
+  coord_cartesian(clip = 'off') +
+  theme(legend.position = "right") +
+  labs(title = '',
+       x = 'Diet Timepoint (Day)',
+       y = 'Bacterial Shannon Diversity')
+
+
+Figure_S3H
+
+#Figure S3A-H: the alpha diversity trends for bacterial and phage
+Figure_S3 <-
+  ggarrange(
+    figureS3A,
+    figureS3B,
+    figureS3C,
+    figureS3D,
+    figureS3E,
+    figureS3F,
+    figureS3G,
+    figureS3H,
+    labels = c("A.", "B.", "C.", "D.", "E.", "F.", "G.", "H."),
+    align = "v",
+    ncol = 2,
+    nrow = 4,
+    widths = c(10, 10, 10, 10, 10, 10, 10, 10)
+  )
+
+plot(Figure_S3)
+
+```
+
+```{r Beta diversity analyses (Figures 1 and Figure S4), echo=FALSE}
+
+##Let's make a distance matrix for Phage###
+median.avg.dist.phage.bray <-
+  avgdist(
+    vOTU_vlp1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+
+bray.phage <-
+  as.data.frame(as.matrix(median.avg.dist.phage.bray))
+
+NMDS.phage <-
+  metaMDS(
+    median.avg.dist.phage.bray,
+    distance = "bray",
+    k = 3,
+    noshare = FALSE,
+    trymax = 3500,
+    trace = TRUE
+  )
+stressplot(NMDS.phage)
+coordinates.phage <- data.frame(NMDS.phage$points[, 1:3])
+
+nmds.metadata.phage <-
+  merge(coordinates.phage,
+        metadata1,
+        by.x = "row.names",
+        by.y = "row.names")
+
+nmds.metadata.phage <-
+  data.frame(nmds.metadata.phage,
+             col.names	=	TRUE,
+             row.names	=	TRUE)
+
+cent.diet.phage <-
+  aggregate(cbind(MDS1, MDS3) ~  diet_stage_ind2,
+            data = nmds.metadata.phage,
+            FUN = mean)
+
+segs.diet.phage <-
+  merge(nmds.metadata.phage,
+        setNames(cent.diet.phage, c('diet_stage_ind2', 'oMDS1', 'oMDS3')),
+        by = 'diet_stage_ind2',
+        sort = FALSE)
+
+
+colors28 <- c(
+  "#9c4c72",
+  "#67be40",
+  "#9558ce",
+  "#b6c234",
+  "#5d70de",
+  "#3f9130",
+  "#ce59c4",
+  "#53c873",
+  "#d6418d",
+  "#65cba6",
+  "#de455c",
+  "#3bb8b4",
+  "#da532f",
+  "#4dbcdf",
+  "#de8930",
+  "#5d60a9",
+  "#a1ab3c",
+  "#8f4b93",
+  "#cd85ce",
+  "#38793f",
+  "#a19ae1",
+  "#8b7b2e",
+  "#e385a9",
+  "#5ca86c",
+  "#a93d53",
+  "#3c9779",
+  "#aa4a2a",
+  "#606a2c"
+)
+
+shapes_phage <- c(
+  19,
+  15,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  19,
+  15,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  15,
+  15,
+  17,
+  19,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  19,
+  15,
+  17,
+  17,
+  15,
+  17,
+  19,
+  19,
+  17,
+  19,
+  17,
+  19,
+  19,
+  17,
+  19,
+  19,
+  17,
+  17,
+  19,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  17,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  17
+)
+
+segs.diet.phage <-
+  segs.diet.phage %>% plyr::arrange(diet_stage_ind2)
+
+Figure_S4A <-
+  ggplot(segs.diet.phage,
+         aes(
+           x = MDS1,
+           y = MDS2,
+           colour = subject_id,
+           shape = diet_stage2,
+         )) +
+  geom_point(size = 6) +
+  scale_color_manual(values = colors28) +
+  scale_shape_manual(values = shapes_phage) +
+  coord_fixed() +
+  geom_text(
+    label = as.factor(segs.diet.phage$subject_id),
+    size = 3,
+    nudge_x = 0.025
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_rect(
+      colour = "black",
+      fill = NA,
+      size = 1
+    ),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+plot(Figure_S4A)
+
+###Test for homogeneity of variances####
+disp.all.phage <-
+  betadisper(
+    median.avg.dist.phage.bray,
+    group = nmds.metadata.phage$diet_stage2,
+    type = c("centroid"),
+    bias.adjust = TRUE,
+    sqrt.dist = TRUE,
+    add = FALSE
+  )
+
+disp.all.phage
+anova(disp.all.phage)
+plot(disp.all.phage)
+boxplot(disp.all.phage)
+
+perm.disp.phage <-
+  permutest(
+    disp.all.phage,
+    group = nmds.metadata.phage$diet_stage2,
+    pairwise = FALSE,
+    permutations = 999,
+    parallel = 1
+  )
+
+perm.disp.phage
+
+PERMANOVA.phage <-
+  adonis2(
+    bray.phage ~ diet_stage2 + subject_id + ethnicity,
+    data = nmds.metadata.phage,
+    strata = nmds.metadata.phage$ethnicity,
+    permutations = 999
+  )
+
+PERMANOVA.phage
+
+
+PERMANOVA.phage2 <-
+  adonis2(
+    bray.vOTU ~ diet_timepoint * ethnicity + organism + subject_id,
+    data = nmds.metadata.phage,
+    strata = nmds.metadata.phage$subject_ID,
+    permutations = 999
+  )
+
+PERMANOVA.phage2
+
+###Let's make a distance matrix for Bacteria###
+median.avg.dist.bact.bray <-
+  avgdist(
+    bOTU,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+
+bray.bact <-
+  as.data.frame(as.matrix(median.avg.dist.bact.bray))
+
+NMDS.bact <-
+  metaMDS(
+    median.avg.dist.bact.bray,
+    distance = "bray",
+    k = 3,
+    noshare = FALSE,
+    trymax = 400,
+    trace = TRUE
+  )
+stressplot(NMDS.bact)
+coordinates.bact <- data.frame(NMDS.bact$points[, 1:3])
+
+nmds.metadata.bact <-
+  merge(coordinates.bact,
+        metadata1,
+        by.x = "row.names",
+        by.y = "row.names")
+
+nmds.metadata.bact <-
+  data.frame(nmds.metadata.bact,
+             col.names	=	TRUE,
+             row.names	=	TRUE)
+
+cent.diet <-
+  aggregate(cbind(MDS1, MDS3) ~ diet_stage_ind2,
+            data = nmds.metadata.bact,
+            FUN = mean)
+
+segs.diet <-
+  merge(nmds.metadata.bact,
+        setNames(cent.diet, c('diet_stage_ind2', 'oMDS1', 'oMDS3')),
+        by = 'diet_stage_ind2',
+        sort = FALSE)
+
+colors35 <- c(
+  "#9c4c72",
+  "#67be40",
+  "#9558ce",
+  "#b6c234",
+  "#5d70de",
+  "#3f9130",
+  "#ce59c4",
+  "#53c873",
+  "#d6418d",
+  "#65cba6",
+  "#de455c",
+  "#3bb8b4",
+  "#da532f",
+  "#4dbcdf",
+  "#de8930",
+  "#508ece",
+  "#d0a642",
+  "#5d60a9",
+  "#a1ab3c",
+  "#8f4b93",
+  "#67852a",
+  "#cd85ce",
+  "#38793f",
+  "#a19ae1",
+  "#8b7b2e",
+  "#e385a9",
+  "#5ca86c",
+  "#a93d53",
+  "#3c9779",
+  "#aa4a2a",
+  "#206e54",
+  "#c86f6f",
+  "#a4b56d",
+  "#e4956e",
+  "#606a2c"
+)
+
+shapes_diet_stages <- c(
+  19,
+  15,
+  17,
+  17,
+  15,
+  17,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  15,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  15,
+  17,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17,
+  19,
+  19,
+  17,
+  17,
+  17,
+  17,
+  15,
+  17,
+  17,
+  17,
+  17,
+  19,
+  15,
+  15,
+  17,
+  17,
+  17,
+  19,
+  17,
+  17,
+  17,
+  19,
+  19,
+  17,
+  17,
+  17,
+  17,
+  19,
+  19,
+  15,
+  17,
+  17,
+  17
+)
+
+segs.diet <-  segs.diet %>% plyr::arrange(diet_stage_ind2)
+
+Figure_S4B <- ggplot(segs.diet,
+                  aes(
+                    x = MDS1,
+                    y = MDS3,
+                    colour = subject_id,
+                    shape = diet_stage2
+                  )) +
+  geom_point(size = 6) +
+  scale_color_manual(values = colors35) +
+  scale_shape_manual(values = shapes_diet_stages) +
+  coord_fixed() +
+  geom_text(
+    label = as.factor(segs.diet$subject_id),
+    size = 3,
+    nudge_x = 0.01
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_rect(
+      colour = "black",
+      fill = NA,
+      size = 1
+    ),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+plot(Figure_S4B)
+
+###Test for homogeneity of variances####
+disp.all.bact <-
+  betadisper(
+    median.avg.dist.bact.bray,
+    group = nmds.metadata.bact$diet_stage2,
+    type = c("centroid"),
+    bias.adjust = TRUE,
+    sqrt.dist = TRUE,
+    add = FALSE
+  )
+
+disp.all.bact
+anova(disp.all.bact)
+plot(disp.all.bact)
+boxplot(disp.all.bact)
+
+perm.disp.bact <-
+  permutest(
+    disp.all.bact,
+    group = nmds.metadata.bact$diet_stage2,
+    pairwise = FALSE,
+    permutations = 999,
+    parallel = 1
+  )
+
+perm.disp.bact
+
+PERMANOVA.bact <-
+  adonis2(
+    bray.bact ~ diet_stage2 + subject_id + ethnicity,
+    data = nmds.metadata.bact,
+    strata = nmds.metadata.bact$ethnicity,
+    permutations = 999
+  )
+
+PERMANOVA.bact
+
+#plotting ordination plots for phage and bacterial community composition 
+
+Figure_S4 <- ggarrange(
+  fig_S4A,
+  fig_S4B,
+  labels = c("A.", "B."),
+  align = "h",
+  ncol = 2,
+  nrow = 1,
+  widths = c(10, 10)
+)
+
+plot(Figure_S4)
+
+###Mantel tests###
+#read in filtered OTU tables, having matching samples, calculate distances, run mantel
+
+vOTU_mantel <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "Table_S16")
+
+vOTU_mantel <-
+  as.data.frame(vOTU_mantel, col.names	=	TRUE,	row.names	=	TRUE)
+vOTU_mantel[1:2, 1:3]
+vOTU_mantel <- vOTU_mantel[-86, ]
+vOTU_mantel.1 <- vOTU_mantel[-1]
+row.names(vOTU_mantel.1) <- vOTU_mantel$...1
+sapply(vOTU_mantel.1, class)
+vOTU_mantel.1[1:2, 1:3]
+
+bOTU_mantel <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "Table_S17")
+
+bOTU_mantel <-
+  as.data.frame(bOTU_mantel, col.names	=	TRUE,	row.names	=	TRUE)
+bOTU_mantel[1:2, 1:3]
+bOTU_mantel.1 <- bOTU_mantel[-1]
+row.names(bOTU_mantel.1) <- bOTU_mantel$...1
+sapply(bOTU_mantel.1, class)
+bOTU_mantel.1[1:2, 1:3]
+
+#recalculate the distances now that the samples dates by individuals corresponds between the phage and bacterial dataset/communities
+
+median.avg.dist.phage.bray.man <-
+  avgdist(
+    vOTU_mantel.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.man <-
+  as.matrix(median.avg.dist.phage.bray.man)
+
+median.avg.dist.bact.bray.man <-
+  avgdist(
+    bOTU_mantel.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+
+median.avg.dist.bact.bray.man <-
+  as.matrix(median.avg.dist.bact.bray.man)
+
+bact.phage.correlation <-
+  mantel(
+    median.avg.dist.bact.bray.man,
+    median.avg.dist.phage.bray.man,
+    method = "spearman",
+    permutations = 999,
+    strata = NULL,
+    na.rm = FALSE,
+    parallel = getOption("mc.cores")
+  )
+
+bact.phage.correlation
+
+#Analyzing the within versus between group pairwise distances for phage and bacterial communities for a subset of individuals (n =17). First we need to calculate coordinates and merge with the corresponding metadata since the distance matrix is from a subset of individuals (n = 17) and needed Bray-Curtis distances needed to be recalculated
+
+#For phage communities
+phage.otu.sub <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843647",
+      "SRR19843658",
+      "SRR19843723",
+      "SRR19843724",
+      "SRR19843613",
+      "SRR19843624",
+      "SRR19843700",
+      "SRR19843711",
+      "SRR19843722",
+      "SRR19843576",
+      "SRR19843587",
+      "SRR19843598",
+      "SRR19843667",
+      "SRR19843678",
+      "SRR19843689",
+      "SRR19843652",
+      "SRR19843653",
+      "SRR19843654",
+      "SRR19843655",
+      "SRR19843656",
+      "SRR19843657",
+      "SRR19843659",
+      "SRR19843645",
+      "SRR19843646",
+      "SRR19843648",
+      "SRR19843649",
+      "SRR19843650",
+      "SRR19843651",
+      "SRR19843640",
+      "SRR19843641",
+      "SRR19843643",
+      "SRR19843644",
+      "SRR19843630",
+      "SRR19843631",
+      "SRR19843632",
+      "SRR19843633",
+      "SRR19843634",
+      "SRR19843635",
+      "SRR19843637",
+      "SRR19843638",
+      "SRR19843566",
+      "SRR19843568",
+      "SRR19843569",
+      "SRR19843570",
+      "SRR19843629",
+      "SRR19843559",
+      "SRR19843561",
+      "SRR19843562",
+      "SRR19843563",
+      "SRR19843565",
+      "SRR19843552",
+      "SRR19843553",
+      "SRR19843554",
+      "SRR19843555",
+      "SRR19843557",
+      "SRR19843558",
+      "SRR19843539",
+      "SRR19843540",
+      "SRR19843541",
+      "SRR19843542",
+      "SRR19843543",
+      "SRR19843544",
+      "SRR19843628",
+      "SRR19843677",
+      "SRR19843679",
+      "SRR19843680",
+      "SRR19843681",
+      "SRR19843682",
+      "SRR19843684",
+      "SRR19843685",
+      "SRR19843661",
+      "SRR19843662",
+      "SRR19843663",
+      "SRR19843664",
+      "SRR19843665",
+      "SRR19843666",
+      "SRR19843668",
+      "SRR19843669",
+      "SRR19843596",
+      "SRR19843599",
+      "SRR19843600",
+      "SRR19843601",
+      "SRR19843602",
+      "SRR19843591",
+      "SRR19843592",
+      "SRR19843593",
+      "SRR19843594",
+      "SRR19843595",
+      "SRR19843584",
+      "SRR19843585",
+      "SRR19843586",
+      "SRR19843588",
+      "SRR19843589",
+      "SRR19843590",
+      "SRR19843577",
+      "SRR19843579",
+      "SRR19843580",
+      "SRR19843581",
+      "SRR19843582",
+      "SRR19843583"
+    )
+  )
+phage.otu.sub <- as.data.frame(phage.otu.sub)
+phage.otu.sub.1 <- phage.otu.sub [-1]
+row.names(phage.otu.sub.1) <- phage.otu.sub$...1
+sapply(phage.otu.sub.1, class)
+phage.otu.sub.1[1:2, 1:3]
+
+median.avg.dist.phage.bray.sub <-
+  avgdist(
+    phage.otu.sub.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+
+median.avg.dist.phage.bray.sub <-
+  as.matrix(median.avg.dist.phage.bray.sub)
+
+NMDS.phage.sub <-
+  metaMDS(
+    median.avg.dist.phage.bray.sub,
+    distance = "bray",
+    k = 3,
+    noshare = FALSE,
+    trymax = 3500,
+    trace = TRUE
+  )
+stressplot(NMDS.phage.sub)
+coordinates.phage.sub <- data.frame(NMDS.phage.sub$points[, 1:3])
+
+nmds.metadata.phage.sub <-
+  merge(coordinates.phage.sub,
+        metadata1,
+        by.x = "row.names",
+        by.y = "row.names")
+
+nmds.metadata.phage.sub <-
+  data.frame(nmds.metadata.phage.sub,
+             col.names	=	TRUE,
+             row.names	=	TRUE)
+
+#For individual phage trends
+#use 'usedist' package to convert to nice dataframe
+phage_bray_df <-
+  dist_groups(d = median.avg.dist.phage.bray.sub, g = nmds.metadata.phage.sub$subject_id)
+
+## ---- plot "within" compared to "all others" ----
+phage_dat <- phage_bray_df %>%
+  plyr::mutate(is.within = if_else(Group1 == Group2, "Within", "Between")) %>%
+  dplyr::select(Item1, Item2, Group1, Group2, is.within, Distance) %>%
+  pivot_longer(
+    cols = c(Group1, Group2),
+    names_to = "oldGroup",
+    values_to = "newLab"
+  ) %>%
+  plyr::mutate(is.within = factor(
+    is.within,
+    ordered = TRUE,
+    levels = c("Within", "Between")
+  ))
+
+#stats test doesn't work for individual by diet stage
+stats2 <- phage_dat %>%
+  group_by(newLab) %>%
+  wilcox_test(Distance ~ is.within, p.adjust.method = "fdr") %>%
+  add_significance() %>%
+  add_xy_position()
+stats2
+
+#plot for individual and diet stage (before, during, after)
+Figure_1A <- ggboxplot(
+  phage_dat %>%
+    plyr::mutate(newLab = factor(
+      newLab,
+      ordered = TRUE,
+      levels = c(
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P13",
+        "P26",
+        "P29",
+        "P30",
+        "P31",
+        "P32",
+        "P33"
+      )
+    )),
+  # order by increasing median
+  x = "is.within",
+  y = "Distance",
+  fill = "is.within",
+  #add = "mean_sd",
+  add.params = list(color = "black", size = 0.05),
+  # boxplot
+  size = 0.25,
+  width = 0.75,
+  outlier.shape = NA,
+  notch = FALSE,
+  # boxplot params
+  facet.by = "newLab",
+  ncol = 6,
+  strip.position = "bottom",
+  # facet params
+  legend = "none",
+  xlab = "",
+  ylab = "Pairwise Bray-Curtis Distance"
+) + geom_jitter(
+  alpha = 0.05,
+  width = 0.15,
+  #color = "black",
+  stroke = 0.5,
+  aes(fill = factor(is.within))
+) +
+  scale_color_manual(values = c("#93b2b9", "#FFDEAD")) +
+  scale_fill_manual(values = c("#93b2b9", "#FFDEAD")) +
+  scale_y_continuous(limits = c(0.75, 1), breaks = seq(0, 1, by = 0.05)) +
+  scale_x_discrete(position = "top") +
+  theme(
+    strip.background = element_rect(fill = "white", color = NA),
+    strip.text = element_text(size = 10, face = "italic"),
+    axis.text.x = element_text(size = 10),
+    text = element_text(size = 10)
+  )
+
+plot(Figure_1A)
+
+#For bacterial communities
+
+bact.otu.sub <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571149",
+      "SRR14571150",
+      "SRR14571152",
+      "SRR14571153",
+      "SRR14571154",
+      "SRR14571155",
+      "SRR14571159",
+      "SRR14571160",
+      "SRR14571161",
+      "SRR14571163",
+      "SRR14571164",
+      "SRR14571165",
+      "SRR14571166",
+      "SRR14571167",
+      "SRR14571168",
+      "SRR14571169",
+      "SRR14571170",
+      "SRR14571171",
+      "SRR14571172",
+      "SRR14571173",
+      "SRR14571174",
+      "SRR14571175",
+      "SRR14571176",
+      "SRR14571177",
+      "SRR14571178",
+      "SRR14571179",
+      "SRR14571215",
+      "SRR14571180",
+      "SRR14571181",
+      "SRR14571183",
+      "SRR14571184",
+      "SRR14571185",
+      "SRR14571186",
+      "SRR14571213",
+      "SRR14571214",
+      "SRR14571187",
+      "SRR14571188",
+      "SRR14571191",
+      "SRR14571192",
+      "SRR14571193",
+      "SRR14571194",
+      "SRR14571212",
+      "SRR14571195",
+      "SRR14571196",
+      "SRR14571197",
+      "SRR14571198",
+      "SRR14571199",
+      "SRR14571200",
+      "SRR14571207",
+      "SRR14571209",
+      "SRR14571210",
+      "SRR14571211",
+      "SRR14571201",
+      "SRR14571202",
+      "SRR14571203",
+      "SRR14571204",
+      "SRR14571205",
+      "SRR14571206",
+      "SRR14571272",
+      "SRR14571273",
+      "SRR14571269",
+      "SRR14571270",
+      "SRR14571271",
+      "SRR14571279",
+      "SRR14571280",
+      "SRR14571281",
+      "SRR14571283",
+      "SRR14571263",
+      "SRR14571264",
+      "SRR14571265",
+      "SRR14571266",
+      "SRR14571267",
+      "SRR14571284",
+      "SRR14571285",
+      "SRR14571253",
+      "SRR14571254",
+      "SRR14571255",
+      "SRR14571256",
+      "SRR14571257",
+      "SRR14571258",
+      "SRR14571291",
+      "SRR14571293",
+      "SRR14571294",
+      "SRR14571028",
+      "SRR14571029",
+      "SRR14571030",
+      "SRR14571032",
+      "SRR14571033",
+      "SRR14571034",
+      "SRR14571035",
+      "SRR14571038",
+      "SRR14571039",
+      "SRR14571049",
+      "SRR14571050",
+      "SRR14571051",
+      "SRR14571052",
+      "SRR14571053",
+      "SRR14571054",
+      "SRR14571055",
+      "SRR14571056",
+      "SRR14571057",
+      "SRR14571059",
+      "SRR14571060",
+      "SRR14571061",
+      "SRR14571062",
+      "SRR14571063",
+      "SRR14571064",
+      "SRR14571065",
+      "SRR14571066",
+      "SRR14571067",
+      "SRR14571068",
+      "SRR14571070",
+      "SRR14571071",
+      "SRR14571072",
+      "SRR14571073",
+      "SRR14571225",
+      "SRR14571074",
+      "SRR14571075",
+      "SRR14571076",
+      "SRR14571077",
+      "SRR14571078",
+      "SRR14571221",
+      "SRR14571223",
+      "SRR14571224",
+      "SRR14571079",
+      "SRR14571080",
+      "SRR14571082",
+      "SRR14571083",
+      "SRR14571084",
+      "SRR14571217",
+      "SRR14571219",
+      "SRR14571220"
+    )
+  )
+bact.otu.sub <- as.data.frame(bact.otu.sub)
+bact.otu.sub.1 <- bact.otu.sub [-1]
+row.names(bact.otu.sub.1) <- bact.otu.sub$...1
+sapply(bact.otu.sub.1, class)
+bact.otu.sub.1[1:2, 1:3]
+
+median.avg.dist.bact.bray.sub <-
+  avgdist(
+    bact.otu.sub.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+
+median.avg.dist.bact.bray.sub <-
+  as.matrix(median.avg.dist.bact.bray.sub)
+
+NMDS.bact.sub <-
+  metaMDS(
+    median.avg.dist.bact.bray.sub,
+    distance = "bray",
+    k = 3,
+    noshare = FALSE,
+    trymax = 3500,
+    trace = TRUE
+  )
+stressplot(NMDS.bact.sub)
+coordinates.bact.sub <- data.frame(NMDS.bact.sub$points[, 1:3])
+
+nmds.metadata.bact.sub <-
+  merge(coordinates.bact.sub,
+        metadata1,
+        by.x = "row.names",
+        by.y = "row.names")
+
+nmds.metadata.bact.sub <-
+  data.frame(nmds.metadata.bact.sub,
+             col.names	=	TRUE,
+             row.names	=	TRUE)
+
+# use 'usedist' package to convert to nice dataframe
+bact_bray_df <-
+  dist_groups(d = median.avg.dist.bact.bray.sub, g = nmds.metadata.bact.sub$subject_id)
+
+## ---- plot "within" compared to "all others (i.e., the between pairwise distances)" ----
+bact_dat <- bact_bray_df %>%
+  plyr::mutate(is.within = if_else(Group1 == Group2, "Within", "Between")) %>%
+  dplyr::select(Item1, Item2, Group1, Group2, is.within, Distance) %>%
+  pivot_longer(
+    cols = c(Group1, Group2),
+    names_to = "oldGroup",
+    values_to = "newLab"
+  ) %>%
+  plyr::mutate(is.within = factor(
+    is.within,
+    ordered = TRUE,
+    levels = c("Within", "Between")
+  ))
+
+# stats test
+stats <- bact_dat %>%
+  group_by(newLab) %>%
+  wilcox_test(Distance ~ is.within, p.adjust.method = "fdr") %>%
+  add_significance() %>%
+  add_xy_position()
+
+stats
+
+Figure_1B <- ggboxplot(
+  bact_dat %>%
+    plyr::mutate(newLab = factor(
+      newLab,
+      ordered = TRUE,
+      levels = c(
+        "P01",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P13",
+        "P26",
+        "P29",
+        "P30",
+        "P31",
+        "P32",
+        "P33"
+      )
+    )),
+  # order by increasing median
+  x = "is.within",
+  y = "Distance",
+  fill = "is.within",
+  #add = "mean_sd",
+  add.params = list(color = "black", size = 0.05),
+  # boxplot
+  size = 0.25,
+  width = 0.75,
+  outlier.shape = NA,
+  notch = FALSE,
+  # boxplot params
+  facet.by = "newLab",
+  ncol = 6,
+  strip.position = "bottom",
+  # facet params
+  legend = "none",
+  xlab = "",
+  ylab = "Pairwise Bray-Curtis Distance"
+) + geom_jitter(
+  alpha = 0.05,
+  width = 0.15,
+  #color = "black",
+  stroke = 0.5,
+  aes(fill = factor(is.within))
+) +
+  # legend and labs
+  stat_pvalue_manual(
+    stats,
+    label = "p.signif",
+    hide.ns = TRUE,
+    tip.length = 0,
+    size = 3.5
+  ) + # brackets
+  scale_color_manual(values = c("#93b2b9", "#FFDEAD")) +
+  scale_fill_manual(values = c("#93b2b9", "#FFDEAD")) +
+  ylim(c(0, 1)) +
+  scale_x_discrete(position = "top") +
+  theme(
+    strip.background = element_rect(fill = "white", color = NA),
+    strip.text = element_text(size = 10, face = "italic"),
+    axis.text.x = element_text(size = 10),
+    text = element_text(size = 10)
+  )
+
+plot(Figure_1B)
+
+Figure_1 <- ggarrange(
+  Figure_1A,
+  Figure_1B,
+  widths = c(1, 1),
+  heights = c(15, 15),
+  nrow = 2,
+  ncol = 1,
+  labels = c('A.', 'B.')
+)
+
+```
+
+```{r Induced and persistent phage analysis (Figures 2, 3, and 4) echo = FALSE}
+
+#Merge the phage OTU table with the metadata table
+OTU.metadata.vlp <-
+  merge(vOTU_vlp1,
+        metadata1,
+        by.x = "row.names",
+        by.y = "row.names")
+
+OTU.metadata.vlp <-
+  data.frame(OTU.metadata.vlp,
+             col.names	=	TRUE,
+             row.names	=	TRUE)
+
+
+OTU.metadata.vlp.sub <-
+  OTU.metadata.vlp[OTU.metadata.vlp$subject_id %in% c(
+    "P01",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P13",
+    "P26",
+    "P29",
+    "P30",
+    "P31",
+    "P32",
+    "P33"
+  ),]
+
+#Remove all unnecessary columns in the metadata (retain diet stage2 and subject id)
+OTU.metadata.vlp.sub <- OTU.metadata.vlp.sub[-(13593:13605)]
+OTU.metadata.vlp.sub <- OTU.metadata.vlp.sub[-(13594:13603)]
+OTU.metadata.vlp.sub <- OTU.metadata.vlp.sub[-(13593)]
+OTU.metadata.vlp.sub <- OTU.metadata.vlp.sub[-(13594)]
+OTU.metadata.vlp.sub <- OTU.metadata.vlp.sub[-(13595:13605)]
+
+#Pivot the dataframe longer to make columns values comparable across individuals and
+OTU.metadata.vlp.sub_long <- OTU.metadata.vlp.sub %>% pivot_longer(
+  cols = "VC_100_0":"VC_S15879",
+  names_to = c("OTU_id"),
+  values_to = "count"
+) %>% relocate(OTU_id, .before = subject_id)
+
+#Calculate the induced vOTUs (those not found before) during and after the diet intervention
+
+#First need to get rid on zero counts
+induced <-
+  rstatix::filter(
+    OTU.metadata.vlp.sub_long,
+    diet_stage2 == 'before' &
+      count > 0 | diet_stage2 == 'during' &
+      count > 0 | diet_stage2 == 'after' & count > 0
+  )
+
+induced <- as.data.frame(induced)
+
+#Next need to get counts for those vOTU across subject_id, diet stage and OTU_id
+induced2 <-
+  induced  %>% group_by(subject_id, diet_stage2, OTU_id) %>%
+  dplyr::summarise_at(vars("count"), sum , na.rm = TRUE)
+
+colnames(induced2)[colnames(induced2) == "count"] = "induced_count"
+
+induced_wide <- induced2 %>%
+  pivot_wider(names_from = diet_stage2,
+              values_from = induced_count,
+              names_vary = "slowest")
+
+induced3 <-
+  rstatix::filter(induced_wide,  before == 'NA' |
+                    after > 0 | during > 0)
+
+induced_wide2 <-
+  induced_wide  %>% group_by(subject_id) %>%
+  dplyr::summarise_at(vars(during:after), sum , na.rm = TRUE)
+
+induced_long2 <- induced_wide2 %>% pivot_longer(
+  cols = during:after,
+  names_to = c("diet_stage"),
+  values_to = "OTU_counts"
+)
+
+inducedWT <-
+  wilcox.test(
+    OTU_counts ~ diet_stage,
+    data = induced_long2,
+    p.adjust.method = "holm",
+    na.rm = TRUE,
+    paired = FALSE,
+    exact = FALSE,
+    conf.int = TRUE
+  )
+print(inducedWT)
+
+qnorm(inducedWT$p.value / 2)
+
+#Figure 2A - The OTU counts for induced phages during the vegetarian diet and after diet stages for seventeen individuals with at least three sampling timepoints across all diet stages.
+
+induced_percent_ind <-
+  read_excel("~/path/to/metadata",
+             sheet = "Table_S18")
+
+induced_percent <-
+  induced_percent_ind  %>% group_by(subject_id) %>%
+  dplyr::summarise_at(vars(during:after), sum , na.rm = TRUE)
+
+induced_percent$relative_during <-
+  (induced_percent$during / (8265)) * 100
+
+induced_percent$relative_after <-
+  (induced_percent$after / (5461)) * 100
+
+induced_percent_long <- induced_percent %>% pivot_longer(
+  cols = relative_during:relative_after,
+  names_to = c("diet_stage"),
+  values_to = "Percentages"
+)
+
+inducedWT2 <-
+  wilcox.test(
+    Percentages ~ diet_stage,
+    data = induced_percent_long,
+    p.adjust.method = "holm",
+    na.rm = TRUE,
+    paired = FALSE,
+    exact = FALSE,
+    conf.int = TRUE
+  )
+print(inducedWT2)
+
+qnorm(inducedWT2$p.value / 2)
+
+Figure_2A <-
+  ggplot(induced_long2, aes(x = reorder(subject_id, rstatix::desc(subject_id)))) +
+  geom_col(
+    data = subset(induced_long2, diet_stage == "during"),
+    aes(
+      y = -OTU_counts,
+      fill = 'during',
+      alpha = 0.2
+    )
+  ) +
+  geom_col(
+    data = subset(induced_long2, diet_stage == "after"),
+    aes(y = OTU_counts, fill = 'after', alpha = 0.2)
+  ) +
+  coord_flip() + scale_fill_manual(values = c("#738DCC", "#75A046")) +
+  scale_y_continuous(breaks = seq(-1500, 1500, by = 250),
+                     labels = (c(
+                       seq(1500, 0, by = -250), seq(250, 1500, by = 250)
+                     ))) +
+  
+  geom_hline(yintercept = 0) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(
+    axis.line.x = element_line(
+      colour = 'black',
+      size = 0.5,
+      linetype = 'solid'
+    ),
+    axis.line.y = element_line(
+      colour = 'black',
+      size = 0.5,
+      linetype = 'solid'
+    ),
+    axis.ticks = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor =  element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  )
+
+Figure_2A
+
+#Figure 2B - The percentage of total induced phages OTUs during and after diet stages across participants
+
+Figure_2B <-
+  ggplot(induced_percent_long, aes(x = reorder(subject_id, rstatix::desc(subject_id)))) +
+  geom_col(
+    data = subset(induced_percent_long, diet_stage == "relative_during"),
+    aes(
+      y = -Percentages,
+      fill = 'relative_during',
+      alpha = 0.2
+    )
+  ) +
+  geom_col(
+    data = subset(induced_percent_long, diet_stage == "relative_after"),
+    aes(y = Percentages, fill = 'relative_after', alpha = 0.2)
+  ) +
+  coord_flip() + scale_fill_manual(values = c("#738DCC", "#75A046")) +
+  scale_y_continuous(breaks = seq(-50, 50, by = 5),
+                     labels = (c(seq(50, 0, by = -5), seq(5, 50, by = 5)))) +
+  
+  geom_hline(yintercept = 0) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(
+    axis.line.x = element_line(
+      colour = 'black',
+      size = 0.5,
+      linetype = 'solid'
+    ),
+    axis.line.y = element_line(
+      colour = 'black',
+      size = 0.5,
+      linetype = 'solid'
+    ),
+    axis.ticks = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor =  element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  )
+
+Figure_2B
+
+#Calculate the vOTUs that were present before, during, and after the diet intervention (i.e., persisters)
+#First need to get rid of zero counts
+persisters <-
+  rstatix::filter(
+    OTU.metadata.vlp.sub_long,
+    diet_stage2 == 'before' &
+      count > 0 | diet_stage2 == 'during' &
+      count > 0 | diet_stage2 == 'after' & count > 0
+  )
+
+persisters <- as.data.frame(persisters)
+
+#Persisters_stage <- as.data.frame(persisters_stage)
+persisters_per <-
+  persisters  %>% group_by(subject_id, diet_stage2, OTU_id) %>%
+  dplyr::summarise_at(vars("count"), sum , na.rm = TRUE)
+
+colnames(persisters_per)[colnames(persisters_per) == "count"] = "persister_count"
+
+persisters_wide <- persisters_per %>%
+  pivot_wider(names_from = diet_stage2,
+              values_from = persister_count,
+              names_vary = "slowest")
+
+persisters_wide2 <-
+  persisters_wide[complete.cases(persisters_wide$`before`),]
+
+persisters_wide3 <-
+  persisters_wide2  %>% group_by(subject_id) %>%
+  dplyr::summarise_at(vars(after:during), sum , na.rm = TRUE)
+
+colSums(persisters_wide3[, 2:4])
+
+persisters_wide3$rel_after <-
+  (persisters_wide3$after / persisters_wide3$before)
+
+persisters_wide3$rel_during <-
+  (persisters_wide3$during / persisters_wide3$before)
+
+persister_long3 <- persisters_wide3 %>% pivot_longer(
+  cols = rel_after:rel_during,
+  names_to = c("diet_stage"),
+  values_to = "proportion"
+)
+
+persWT <-
+  wilcox.test(
+    proportion ~ diet_stage,
+    data = persister_long3,
+    p.adjust.method = "holm",
+    na.rm = TRUE,
+    paired = FALSE,
+    exact = FALSE,
+    conf.int = TRUE
+  )
+print(persWT)
+qnorm(persWT$p.value / 2)
+
+#Figure 2C - The fold abundance changes of persistent OTUs present during and after the diet relative to before the diet commenced
+
+Figure_2C <-
+  ggplot(persister_long3, aes(x = reorder(subject_id, rstatix::desc(subject_id)))) +
+  geom_col(
+    data = subset(persister_long3, diet_stage == "rel_during"),
+    aes(
+      y = -proportion,
+      fill = 'rel_during',
+      alpha = 0.2
+    )
+  ) +
+  geom_col(
+    data = subset(persister_long3, diet_stage == "rel_after"),
+    aes(y = proportion, fill = 'rel_after', alpha = 0.2)
+  ) +
+  coord_flip() + scale_fill_manual(values = c("#738DCC", "#75A046")) +
+  scale_y_continuous(breaks = seq(-1.50, 1.50, by = 0.25),
+                     labels = (c(
+                       seq(1.50, 0, by = -0.25), seq(0.25, 1.50, by = 0.25)
+                     ))) +
+  geom_hline(yintercept = c(0)) +
+theme_minimal() +
+  theme(legend.position = "none") +
+  theme(
+    axis.line.x = element_line(
+      colour = 'black',
+      size = 0.5,
+      linetype = 'solid'
+    ),
+    axis.line.y = element_line(
+      colour = 'black',
+      size = 0.5,
+      linetype = 'solid'
+    ),
+    axis.ticks = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor =  element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  )
+
+Figure_2C
+
+#Combine all the plots together and make one figure. Induced and persistent phages are pronounced during the vegetarian diet
+Figure_2 <-
+  ggarrange(
+    Figure_2A,
+    Figure_2B,
+    Figure_2C,
+    labels = c("A.", "B.", "C."),
+    align = "h",
+    ncol = 3,
+    nrow = 1,
+    widths = c(8, 8, 8),
+    heights = c(5, 5, 5),
+    hjust = -0.5,
+    vjust = 1.5
+  )
+
+plot(Figure_2)
+
+#Figure 3 - The normalized frequencies of induced phage OTUs at during and after diet stages by predicted bacterial host genera and individual
+
+#For induced phages only consider the counts of an OTU for during or after but not for both during and after which would inflate abundances
+
+induced <-
+  read_excel("~/path/to/metadata.xlsx",
+             sheet = "Table_S18")
+
+induced <- replace(induced, is.na(induced), 0)
+sapply(induced, class)
+
+induced$total_counts <- induced$during + induced$after
+
+induced_host <- induced %>%
+  pivot_wider(names_from = predicted_host,
+              values_from = total_counts,
+              names_vary = "slowest")
+
+induced_host <- induced_host[, -(2:4)]
+
+induced_host2 <-
+  induced_host  %>% group_by(subject_id) %>%
+  dplyr::summarise_at(vars(Vescimonas:KLE1615), sum , na.rm = TRUE)
+
+induced_host2 <-
+  as.data.frame(induced_host2, col.names	=	TRUE,	row.names	=	TRUE)
+
+induced_host2.1 <- induced_host2[-1]
+row.names(induced_host2.1) <- induced_host2$subject_id
+sapply(induced_host2, class)
+induced_host2.1[1:2, 1:3]
+
+induced_host2.1 <- as.matrix(t(induced_host2.1))
+
+colSums(induced_host2.1)
+rowSums(induced_host2.1)
+
+#Get an idea of the counts of the largest number of induced phages across 16 participants
+sort(rowSums(induced_host2.1))
+
+#Adjust the plot dimensions so all data is shown
+par(mar = c(7, 5, 5, 8) + 0.01)
+
+barplot(
+  sort(rowSums(induced_host2.1)),
+  ylim = c(0, 1500),
+  xlim = c(0, NROW(induced_host2.1)),
+  xlab = "Induced Phage Predicted Host",
+  ylab = "Induced Phage OTU Counts",
+  col = "Grey",
+  las = 2,
+  cex.lab = 0.5,
+  cex.names = 0.5
+)
+
+#Proportional scale the count data across all individuals
+induced.stand <-
+  sweep(induced_host2.1, 2, colSums(induced_host2.1), `/`)
+
+colSums(induced.stand) #all of the columns sums should add to 1
+
+#Then normalize the proportions by predicted host genera
+induced.norm <-
+  ExPosition::rowNorms(induced.stand,
+                       type = "z",
+                       center = TRUE,
+                       scale = TRUE)
+rowSums(induced.norm)
+
+#Then using the standardized matrix, first by individual (columns) then by host rows make a Euclidean distance matrix
+dist_participant <- vegdist(t(induced.norm), method = 'euclidean')
+clusters.participant <- hclust(dist_participant, 'average')
+
+dist_host <- vegdist(induced.norm, method = 'euclidean')
+clusters.host <- hclust(dist_host, 'average')
+
+Figure_3 <- heatmap.2(
+  induced.norm,
+  Rowv = as.dendrogram(clusters.host),
+  Colv = as.dendrogram(clusters.participant),
+  col = rev(brewer.pal(9, "BrBG")),
+  trace = "none",
+  tracecol = "#edca80",
+  margins = c(5, 35),
+  key.xlab = "Row Z-Score",
+  key.title = NA,
+  keysize = 0.5,
+  key.par = list(mar = c(3.5, 0, 3, 0)),
+  sepwidth = c(0.014, 0.028),
+  sepcolor = "black",
+  colsep = 1:ncol(induced.norm),
+  rowsep = 1:nrow(induced.norm),
+  cexRow = 0.5,
+  cexCol = 0.5
+)
+
+#Test the likelihood of induced phage host across environments??? Make sure to proportionally scale first, then transform with standard z-scores
+G.test.induced <- GTest(induced_host2.1, correct = "none")
+G.test.induced
+
+#Figure 4 - Persistent phage activity significantly varies by diet stages. 
+persister_host <-
+  read_excel("~/path/to/metadata",
+             sheet = "Table_S19")
+
+persister_host2 <-
+  persister_host  %>% group_by(subject_id, diet_stage2, predicted_host) %>%
+  dplyr::summarise_at(vars(count), sum , na.rm = TRUE)
+
+persister_host3 <- persister_host2 %>%
+  pivot_wider(names_from = predicted_host,
+              values_from = count,
+              names_vary = "slowest")
+
+persister_host4 <-
+  replace(persister_host3, is.na(persister_host3), 0)
+sapply(persister_host4, class)
+
+persister_host5 <- persister_host4 %>% pivot_longer(
+  cols = Acetatifactor:URXU01,
+  names_to = c("predicted_host"),
+  values_to = "counts"
+)
+
+persister_host6 <-
+  persister_host5  %>% group_by(diet_stage2, predicted_host) %>%
+  dplyr::summarise_at(vars(counts), sum , na.rm = TRUE)
+
+persister_host7 <- persister_host6 %>%
+  pivot_wider(names_from = diet_stage2,
+              values_from = counts,
+              names_vary = "slowest")
+
+persister_host7 <-
+  as.data.frame(persister_host7, col.names	=	TRUE,	row.names	=	TRUE)
+
+persister_host7.1 <- persister_host7[-1]
+row.names(persister_host7.1) <- persister_host7$predicted_host
+sapply(persister_host7.1, class)
+persister_host7.1[1:2, 1:3]
+
+colSums(persister_host7.1)
+rowSums(persister_host7.1)
+
+#Get an idea of the counts of the largest number of induced phages across 16 participants
+sort(rowSums(persister_host7.1))
+
+#Adjust the plot dimensions so all data is shown
+par(mar = c(7, 5, 5, 8) + 0.01)
+
+barplot(
+  sort(rowSums(persister_host7.1)),
+  ylim = c(0, 1500),
+  xlim = c(0, NROW(persister_host7.1)),
+  xlab = "Persisten Phage Predicted Host",
+  ylab = "Persistent Phage OTU Counts",
+  col = "Grey",
+  las = 2,
+  cex.lab = 0.5,
+  cex.names = 0.5
+)
+
+#Proportional scale the count data across all diet stages
+persist.stand <-
+  sweep(persister_host7.1, 2, colSums(persister_host7.1), `/`)
+
+colSums(persist.stand) #all of the columns sums should add to 1
+
+#Then normalize the proportions by predicted host genera
+persist.norm <-
+  ExPosition::rowNorms(persist.stand,
+                       type = "z",
+                       center = TRUE,
+                       scale = TRUE)
+rowSums(persist.norm)
+
+#Then using the standardized matrix, first by individual (columns) then by host rows make a Euclidean distance matrix
+dist_diet_stage <- vegdist(t(persist.norm), method = 'euclidean')
+clusters.diet_stage <- hclust(dist_diet_stage, 'average')
+
+dist_host_pers <- vegdist(persist.norm, method = 'euclidean')
+clusters.host.per <- hclust(dist_host_pers, 'average')
+
+Figure_4 <- heatmap.2(
+  persist.norm,
+  Rowv = as.dendrogram(clusters.host.per),
+  Colv = as.dendrogram(clusters.diet_stage),
+  col = rev(brewer.pal(9, "BrBG")),
+  trace = "none",
+  tracecol = "#edca80",
+  margins = c(5, 20),
+  key.xlab = "Row Z-Score",
+  key.title = NA,
+  keysize = 0.5,
+  key.par = list(mar = c(3.5, 0, 3, 0)),
+  sepwidth = c(0.014, 0.028),
+  sepcolor = "black",
+  colsep = 1:ncol(persist.norm),
+  rowsep = 1:nrow(persist.norm),
+  cexRow = 0.15,
+  cexCol = 1
+)
+
+#Test the likelihood of induced phage host across environments??? Make sure to proportionally scale first, then transform with standard z-scores
+G.test.persister <- GTest(persister_host7.1, correct = "none")
+G.test.persister
+
+```
+
+```{r Phage and bacterial commmunity pattern analyses (Figure 5 and Figure S5) echo=FALSE}
+
+#Figure 5A - Phage communities(VLP) from a subset of 17 individuals
+PCOA.phage <- pcoa(median.avg.dist.phage.bray.sub)
+biplot.pcoa(PCOA.phage)
+median.avg.dist.phage.bray.sub
+
+beta_dist_phage_matrix <- as.matrix(median.avg.dist.phage.bray.sub)
+beta_dist_phage_matrix[lower.tri(beta_dist_phage_matrix, diag = FALSE)] <-
+  NA
+beta_dist_phage_matrix[beta_dist_phage_matrix == 0.0000000] <- NA
+
+beta_dist_phage_matrix <- as.data.frame(beta_dist_phage_matrix)
+beta_dist_phage_matrix <-
+  cbind(row.names(beta_dist_phage_matrix), beta_dist_phage_matrix)
+beta_dist_phage_matrix <- as.data.table(beta_dist_phage_matrix)
+beta_dist_phage_matrix_long <-
+  data.table::melt(beta_dist_phage_matrix, id.vars = colnames(beta_dist_phage_matrix)[1])
+colnames(beta_dist_phage_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage_matrix_long$time1 - beta_dist_phage_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage_matrix_long$z <-
+  log(1 - beta_dist_phage_matrix_long$beta_dis)
+
+beta_dist_phage_matrix_long[is.na(beta_dist_phage_matrix_long) |
+                              beta_dist_phage_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage <-
+  lm(beta_dist_phage_matrix_long$z ~ beta_dist_phage_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage)
+resid(linearmodel_beta_phage)
+AIC(linearmodel_beta_phage)
+BIC(linearmodel_beta_phage)
+
+x <- (beta_dist_phage_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-4.189), add=TRUE)
+
+
+beta_dist_phage_plot <-
+  ggplot(beta_dist_phage_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001)
+geom_abline(
+  intercept = -4.18995,
+  slope = 0.02708,
+  linetype = 'dashed',
+  color = '#F8766D'
+) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_5A <- beta_dist_phage_plot  +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5A
+
+#Bacterial communities from a subset of 17 individuals
+PCOA.bact <- pcoa(median.avg.dist.bact.bray.sub)
+biplot.pcoa(PCOA.bact)
+median.avg.dist.bact.bray.sub
+
+beta_dist_bact_matrix <- as.matrix(median.avg.dist.bact.bray.sub)
+beta_dist_bact_matrix[lower.tri(beta_dist_bact_matrix, diag = FALSE)] <-
+  NA
+beta_dist_bact_matrix[beta_dist_bact_matrix == 0.0000000] <- NA
+
+beta_dist_bact_matrix <- as.data.frame(beta_dist_bact_matrix)
+beta_dist_bact_matrix <-
+  cbind(row.names(beta_dist_bact_matrix), beta_dist_bact_matrix)
+beta_dist_bact_matrix <- as.data.table(beta_dist_bact_matrix)
+beta_dist_bact_matrix_long <-
+  data.table::melt(beta_dist_bact_matrix, id.vars = colnames(beta_dist_bact_matrix)[1])
+colnames(beta_dist_bact_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact_matrix_long$srt_time_lag <- sqrt(abs((
+  beta_dist_bact_matrix_long$time1 - beta_dist_bact_matrix_long$time2
+)
+))
+
+beta_dist_bact_matrix_long$z <-
+  log(1 - beta_dist_bact_matrix_long$beta_dis)
+
+linearmodel_beta_bact <-
+  lm(beta_dist_bact_matrix_long$z ~ beta_dist_bact_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact)
+resid(linearmodel_beta_bact)
+AIC(linearmodel_beta_bact)
+BIC(linearmodel_beta_bact)
+
+x <- (beta_dist_bact_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.5118), add=TRUE)
+
+beta_dist_bact_plot <-
+  ggplot(beta_dist_bact_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.511880,
+    slope = -0.002389,
+    linetype = 'dashed',
+    color = '#F8766D'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5A <- beta_dist_bact_plot  +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5A
+
+#Phage participant 01
+phage_otu01 <- vOTU_vlp %>%
+  rstatix::filter(...1 %in% c("SRR19843647",
+                              "SRR19843658",
+                              "SRR19843723",
+                              "SRR19843724"))
+phage_otu01 <- as.data.frame(phage_otu01)
+phage_otu01.1 <- phage_otu01 [-1]
+row.names(phage_otu01.1) <- phage_otu01$...1
+sapply(phage_otu01.1, class)
+phage_otu01.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.01 <-
+  avgdist(
+    phage_otu01.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.01 <-
+  as.matrix(median.avg.dist.phage.bray.01)
+
+PCOA.phage01 <- pcoa(median.avg.dist.phage.bray.01)
+biplot.pcoa(PCOA.phage01)
+median.avg.dist.phage.bray.01
+
+beta_dist_phage01_matrix <- as.matrix(median.avg.dist.phage.bray.01)
+beta_dist_phage01_matrix[lower.tri(beta_dist_phage01_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage01_matrix <- as.data.frame(beta_dist_phage01_matrix)
+beta_dist_phage01_matrix <-
+  cbind(row.names(beta_dist_phage01_matrix),
+        beta_dist_phage01_matrix)
+beta_dist_phage01_matrix <- as.data.table(beta_dist_phage01_matrix)
+
+beta_dist_phage01_matrix_long <-
+  data.table::melt(beta_dist_phage01_matrix,
+                   id.vars = colnames(beta_dist_phage01_matrix)[1])
+colnames(beta_dist_phage01_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage01_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage01_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+
+beta_dist_phage01_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage01_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+
+beta_dist_phage01_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage01_matrix_long$time1 - beta_dist_phage01_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage01_matrix_long$z <-
+  log(1 - beta_dist_phage01_matrix_long$beta_dis)
+
+#Linear model is gets angry about infinite values
+beta_dist_phage01_matrix_long[is.na(beta_dist_phage01_matrix_long) |
+                                beta_dist_phage01_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage01 <-
+  lm(beta_dist_phage01_matrix_long$z ~ beta_dist_phage01_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage01)
+resid(linearmodel_beta_phage01)
+AIC(linearmodel_beta_phage01)
+BIC(linearmodel_beta_phage01)
+
+x <- (beta_dist_phage01_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.1232), add=TRUE)
+
+beta_dist_phage01_plot <-
+  ggplot(beta_dist_phage01_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.1232,
+    slope = -1.1593,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P01)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5B <- beta_dist_phage01_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5B
+
+#Bacteria participant 01
+bact_otu01 <- bOTU_raw %>%
+  rstatix::filter(...1 %in% c("SRR14571149",
+                              "SRR14571150",
+                              "SRR14571152",
+                              "SRR14571153"))
+bact_otu01 <- as.data.frame(bact_otu01)
+bact_otu01.1 <- bact_otu01 [-1]
+row.names(bact_otu01.1) <- bact_otu01$...1
+sapply(bact_otu01.1, class)
+bact_otu01.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.01 <-
+  avgdist(
+    bact_otu01.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.01 <-
+  as.matrix(median.avg.dist.bact.bray.01)
+
+PCOA.bact01 <- pcoa(median.avg.dist.bact.bray.01)
+biplot.pcoa(PCOA.bact01)
+median.avg.dist.bact.bray.01
+
+beta_dist_bact01_matrix <- as.matrix(median.avg.dist.bact.bray.01)
+beta_dist_bact01_matrix[lower.tri(beta_dist_bact01_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact01_matrix <- as.data.frame(beta_dist_bact01_matrix)
+beta_dist_bact01_matrix <-
+  cbind(row.names(beta_dist_bact01_matrix), beta_dist_bact01_matrix)
+
+beta_dist_bact01_matrix <- as.data.table(beta_dist_bact01_matrix)
+
+beta_dist_bact01_matrix_long <-
+  data.table::melt(beta_dist_bact01_matrix, id.vars = colnames(beta_dist_bact01_matrix)[1])
+colnames(beta_dist_bact01_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+
+beta_dist_bact01_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact01_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+
+beta_dist_bact01_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact01_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+
+beta_dist_bact01_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact01_matrix_long$time1 - beta_dist_bact01_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact01_matrix_long$z <-
+  log(1 - beta_dist_bact01_matrix_long$beta_dis)
+
+linearmodel_beta_bact01 <-
+  lm(beta_dist_bact01_matrix_long$z ~ beta_dist_bact01_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact01)
+resid(linearmodel_beta_bact01)
+AIC(linearmodel_beta_bact01)
+BIC(linearmodel_beta_bact01)
+
+x <- (beta_dist_bact01_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.0082), add=TRUE)
+
+
+beta_dist_bact01_plot <-
+  ggplot(beta_dist_bact01_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.008199,
+    slope = -0.081785,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P01)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5B <- beta_dist_bact01_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5B
+
+#Phage participant 03
+phage_otu03 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843613",
+      "SRR19843624",
+      "SRR19843700",
+      "SRR19843711",
+      "SRR19843722"
+    )
+  )
+phage_otu03 <- as.data.frame(phage_otu03)
+phage_otu03.1 <- phage_otu03 [-1]
+row.names(phage_otu03.1) <- phage_otu03$...1
+sapply(phage_otu03.1, class)
+phage_otu03.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.03 <-
+  avgdist(
+    phage_otu03.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.03 <-
+  as.matrix(median.avg.dist.phage.bray.03)
+
+PCOA.phage03 <- pcoa(median.avg.dist.phage.bray.03)
+biplot.pcoa(PCOA.phage03)
+median.avg.dist.phage.bray.03
+
+beta_dist_phage03_matrix <- as.matrix(median.avg.dist.phage.bray.03)
+beta_dist_phage03_matrix[lower.tri(beta_dist_phage03_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage03_matrix <- as.data.frame(beta_dist_phage03_matrix)
+beta_dist_phage03_matrix <-
+  cbind(row.names(beta_dist_phage03_matrix),
+        beta_dist_phage03_matrix)
+beta_dist_phage03_matrix <- as.data.table(beta_dist_phage03_matrix)
+beta_dist_phage03_matrix_long <-
+  data.table::melt(beta_dist_phage03_matrix,
+                   id.vars = colnames(beta_dist_phage03_matrix)[1])
+colnames(beta_dist_phage03_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage03_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage03_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage03_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage03_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage03_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage03_matrix_long$time1 - beta_dist_phage03_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage03_matrix_long$z <-
+  log(1 - beta_dist_phage03_matrix_long$beta_dis)
+
+#Linear model is gets angry about infinite values
+beta_dist_phage03_matrix_long[is.na(beta_dist_phage03_matrix_long) |
+                                beta_dist_phage03_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage03 <-
+  lm(beta_dist_phage03_matrix_long$z ~ beta_dist_phage03_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage03)
+resid(linearmodel_beta_phage03)
+AIC(linearmodel_beta_phage03)
+BIC(linearmodel_beta_phage03)
+
+x <- (beta_dist_phage03_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.16182), add=TRUE)
+
+beta_dist_phage03_plot <-
+  ggplot(beta_dist_phage03_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.1618,
+    slope = -0.6323,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P03)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5C <- beta_dist_phage03_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5C
+
+#Bacteria participant 03
+bact_otu03 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571159",
+      "SRR14571160",
+      "SRR14571161",
+      "SRR14571163",
+      "SRR14571164"
+    )
+  )
+bact_otu03 <- as.data.frame(bact_otu03)
+bact_otu03.1 <- bact_otu03 [-1]
+row.names(bact_otu03.1) <- bact_otu03$...1
+sapply(bact_otu03.1, class)
+bact_otu03.1[1:2, 1:3]
+
+#recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.03 <-
+  avgdist(
+    bact_otu03.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.03 <-
+  as.matrix(median.avg.dist.bact.bray.03)
+
+PCOA.bact03 <- pcoa(median.avg.dist.bact.bray.03)
+biplot.pcoa(PCOA.bact03)
+median.avg.dist.bact.bray.03
+
+beta_dist_bact03_matrix <- as.matrix(median.avg.dist.bact.bray.03)
+beta_dist_bact03_matrix[lower.tri(beta_dist_bact03_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact03_matrix <- as.data.frame(beta_dist_bact03_matrix)
+beta_dist_bact03_matrix <-
+  cbind(row.names(beta_dist_bact03_matrix), beta_dist_bact03_matrix)
+beta_dist_bact03_matrix <- as.data.table(beta_dist_bact03_matrix)
+beta_dist_bact03_matrix_long <-
+  data.table::melt(beta_dist_bact03_matrix, id.vars = colnames(beta_dist_bact03_matrix)[1])
+colnames(beta_dist_bact03_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact03_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact03_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact03_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact03_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact03_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact03_matrix_long$time1 - beta_dist_bact03_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact03_matrix_long$z <-
+  log(1 - beta_dist_bact03_matrix_long$beta_dis)
+
+linearmodel_beta_bact03 <-
+  lm(beta_dist_bact03_matrix_long$z ~ beta_dist_bact03_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact03)
+resid(linearmodel_beta_bact03)
+AIC(linearmodel_beta_bact03)
+BIC(linearmodel_beta_bact03)
+
+x <- (beta_dist_bact03_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.0275), add=TRUE)
+
+beta_dist_bact03_plot <-
+  ggplot(beta_dist_bact03_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.02755,
+    slope = -0.11921,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P03)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5C <- beta_dist_bact03_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5C
+
+#Phage participant 04
+phage_otu04 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843576",
+      "SRR19843587",
+      "SRR19843598",
+      "SRR19843667",
+      "SRR19843678",
+      "SRR19843689"
+    )
+  )
+phage_otu04 <- as.data.frame(phage_otu04)
+phage_otu04.1 <- phage_otu04 [-1]
+row.names(phage_otu04.1) <- phage_otu04$...1
+sapply(phage_otu04.1, class)
+phage_otu04.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.04 <-
+  avgdist(
+    phage_otu04.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.04 <-
+  as.matrix(median.avg.dist.phage.bray.04)
+
+PCOA.phage04 <- pcoa(median.avg.dist.phage.bray.04)
+biplot.pcoa(PCOA.phage04)
+median.avg.dist.phage.bray.04
+
+beta_dist_phage04_matrix <- as.matrix(median.avg.dist.phage.bray.04)
+beta_dist_phage04_matrix[lower.tri(beta_dist_phage04_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage04_matrix <- as.data.frame(beta_dist_phage04_matrix)
+beta_dist_phage04_matrix <-
+  cbind(row.names(beta_dist_phage04_matrix),
+        beta_dist_phage04_matrix)
+beta_dist_phage04_matrix <- as.data.table(beta_dist_phage04_matrix)
+beta_dist_phage04_matrix_long <-
+  data.table::melt(beta_dist_phage04_matrix,
+                   id.vars = colnames(beta_dist_phage04_matrix)[1])
+colnames(beta_dist_phage04_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage04_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage04_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage04_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage04_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage04_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage04_matrix_long$time1 - beta_dist_phage04_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage04_matrix_long$z <-
+  log(1 - beta_dist_phage04_matrix_long$beta_dis)
+
+#Linear model is gets angry about infinite values
+beta_dist_phage04_matrix_long[is.na(beta_dist_phage04_matrix_long) |
+                                beta_dist_phage04_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage04 <-
+  lm(beta_dist_phage04_matrix_long$z ~ beta_dist_phage04_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage04)
+resid(linearmodel_beta_phage04)
+AIC(linearmodel_beta_phage04)
+BIC(linearmodel_beta_phage04)
+
+x <- (beta_dist_phage04_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.3986), add=TRUE)
+
+beta_dist_phage04_plot <-
+  ggplot(beta_dist_phage04_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.3986,
+    slope = -0.9624,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P04)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5D <- beta_dist_phage04_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5D
+
+#Bacteria participant 04
+bact_otu04 <- bOTU_raw %>%
+  rstatix::filter(...1 %in% c("SRR14571167",
+                              "SRR14571168",
+                              "SRR14571169"))
+bact_otu04 <- as.data.frame(bact_otu04)
+bact_otu04.1 <- bact_otu04 [-1]
+row.names(bact_otu04.1) <- bact_otu04$...1
+sapply(bact_otu04.1, class)
+bact_otu04.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.04 <-
+  avgdist(
+    bact_otu04.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.04 <-
+  as.matrix(median.avg.dist.bact.bray.04)
+
+PCOA.bact04 <- pcoa(median.avg.dist.bact.bray.04)
+biplot.pcoa(PCOA.bact04)
+median.avg.dist.bact.bray.04
+
+beta_dist_bact04_matrix <- as.matrix(median.avg.dist.bact.bray.04)
+beta_dist_bact04_matrix[lower.tri(beta_dist_bact04_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact04_matrix <- as.data.frame(beta_dist_bact04_matrix)
+beta_dist_bact04_matrix <-
+  cbind(row.names(beta_dist_bact04_matrix), beta_dist_bact04_matrix)
+beta_dist_bact04_matrix <- as.data.table(beta_dist_bact04_matrix)
+beta_dist_bact04_matrix_long <-
+  data.table::melt(beta_dist_bact04_matrix, id.vars = colnames(beta_dist_bact04_matrix)[1])
+colnames(beta_dist_bact04_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact04_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact04_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact04_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact04_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact04_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact04_matrix_long$time1 - beta_dist_bact04_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact04_matrix_long$z <-
+  log(1 - beta_dist_bact04_matrix_long$beta_dis)
+
+linearmodel_beta_bact04 <-
+  lm(beta_dist_bact04_matrix_long$z ~ beta_dist_bact04_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact04)
+resid(linearmodel_beta_bact04)
+AIC(linearmodel_beta_bact04)
+BIC(linearmodel_beta_bact04)
+
+x <- (beta_dist_bact04_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.005664), add=TRUE)
+
+beta_dist_bact04_plot <-
+  ggplot(beta_dist_bact04_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.005664,
+    slope = -0.074572,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P04)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5D <- beta_dist_bact04_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5D
+
+#Phage participant 05
+phage_otu05 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843652",
+      "SRR19843653",
+      "SRR19843654",
+      "SRR19843655",
+      "SRR19843656",
+      "SRR19843657",
+      "SRR19843659"
+    )
+  )
+phage_otu05 <- as.data.frame(phage_otu05)
+phage_otu05.1 <- phage_otu05 [-1]
+row.names(phage_otu05.1) <- phage_otu05$...1
+sapply(phage_otu05.1, class)
+phage_otu05.1[1:2, 1:3]
+
+#recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.05 <-
+  avgdist(
+    phage_otu05.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.05 <-
+  as.matrix(median.avg.dist.phage.bray.05)
+
+PCOA.phage05 <- pcoa(median.avg.dist.phage.bray.05)
+biplot.pcoa(PCOA.phage05)
+median.avg.dist.phage.bray.05
+
+beta_dist_phage05_matrix <- as.matrix(median.avg.dist.phage.bray.05)
+beta_dist_phage05_matrix[lower.tri(beta_dist_phage05_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage05_matrix <- as.data.frame(beta_dist_phage05_matrix)
+beta_dist_phage05_matrix <-
+  cbind(row.names(beta_dist_phage05_matrix),
+        beta_dist_phage05_matrix)
+beta_dist_phage05_matrix <- as.data.table(beta_dist_phage05_matrix)
+beta_dist_phage05_matrix_long <-
+  data.table::melt(beta_dist_phage05_matrix,
+                   id.vars = colnames(beta_dist_phage05_matrix)[1])
+colnames(beta_dist_phage05_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage05_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage05_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage05_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage05_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage05_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage05_matrix_long$time1 - beta_dist_phage05_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage05_matrix_long$z <-
+  log(1 - beta_dist_phage05_matrix_long$beta_dis)
+
+#Linear model is gets angry about infinite values
+beta_dist_phage05_matrix_long[is.na(beta_dist_phage05_matrix_long) |
+                                beta_dist_phage05_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage05 <-
+  lm(beta_dist_phage05_matrix_long$z ~ beta_dist_phage05_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage05)
+resid(linearmodel_beta_phage05)
+AIC(linearmodel_beta_phage05)
+BIC(linearmodel_beta_phage05)
+
+x <- (beta_dist_phage05_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.3039), add=TRUE)
+
+
+beta_dist_phage05_plot <-
+  ggplot(beta_dist_phage05_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.3039,
+    slope = -0.9579,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P05)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5E <- beta_dist_phage05_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5E
+
+#Bacteria participant 05
+bact_otu05 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571172",
+      "SRR14571173",
+      "SRR14571174",
+      "SRR14571175",
+      "SRR14571176",
+      "SRR14571177",
+      "SRR14571215"
+    )
+  )
+bact_otu05 <- as.data.frame(bact_otu05)
+bact_otu05.1 <- bact_otu05 [-1]
+row.names(bact_otu05.1) <- bact_otu05$...1
+sapply(bact_otu05.1, class)
+bact_otu05.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.05 <-
+  avgdist(
+    bact_otu05.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.05 <-
+  as.matrix(median.avg.dist.bact.bray.05)
+
+PCOA.bact05 <- pcoa(median.avg.dist.bact.bray.05)
+biplot.pcoa(PCOA.bact05)
+median.avg.dist.bact.bray.05
+
+beta_dist_bact05_matrix <- as.matrix(median.avg.dist.bact.bray.05)
+beta_dist_bact05_matrix[lower.tri(beta_dist_bact05_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact05_matrix <- as.data.frame(beta_dist_bact05_matrix)
+beta_dist_bact05_matrix <-
+  cbind(row.names(beta_dist_bact05_matrix), beta_dist_bact05_matrix)
+beta_dist_bact05_matrix <- as.data.table(beta_dist_bact05_matrix)
+beta_dist_bact05_matrix_long <-
+  data.table::melt(beta_dist_bact05_matrix, id.vars = colnames(beta_dist_bact05_matrix)[1])
+colnames(beta_dist_bact05_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact05_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact05_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact05_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact05_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact05_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact05_matrix_long$time1 - beta_dist_bact05_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact05_matrix_long$z <-
+  log(1 - beta_dist_bact05_matrix_long$beta_dis)
+
+linearmodel_beta_bact05 <-
+  lm(beta_dist_bact05_matrix_long$z ~ beta_dist_bact05_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact05)
+resid(linearmodel_beta_bact05)
+AIC(linearmodel_beta_bact05)
+BIC(linearmodel_beta_bact05)
+
+x <- (beta_dist_bact05_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.0226), add=TRUE)
+
+beta_dist_bact05_plot <-
+  ggplot(beta_dist_bact05_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter (width = 0.001) +
+  geom_abline(
+    intercept = -0.022619,
+    slope = -0.046228,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P05)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+beta_dist_bact05_plot
+
+Figure_S5E <- beta_dist_bact05_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5E
+
+#Phage participant 06
+phage_otu06 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843645",
+      "SRR19843646",
+      "SRR19843648",
+      "SRR19843649",
+      "SRR19843650",
+      "SRR19843651"
+    )
+  )
+phage_otu06 <- as.data.frame(phage_otu06)
+phage_otu06.1 <- phage_otu06 [-1]
+row.names(phage_otu06.1) <- phage_otu06$...1
+sapply(phage_otu06.1, class)
+phage_otu06.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.06 <-
+  avgdist(
+    phage_otu06.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.06 <-
+  as.matrix(median.avg.dist.phage.bray.06)
+
+PCOA.phage06 <- pcoa(median.avg.dist.phage.bray.06)
+biplot.pcoa(PCOA.phage06)
+median.avg.dist.phage.bray.06
+
+beta_dist_phage06_matrix <- as.matrix(median.avg.dist.phage.bray.06)
+beta_dist_phage06_matrix[lower.tri(beta_dist_phage06_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage06_matrix <- as.data.frame(beta_dist_phage06_matrix)
+beta_dist_phage06_matrix <-
+  cbind(row.names(beta_dist_phage06_matrix),
+        beta_dist_phage06_matrix)
+beta_dist_phage06_matrix <- as.data.table(beta_dist_phage06_matrix)
+beta_dist_phage06_matrix_long <-
+  data.table::melt(beta_dist_phage06_matrix,
+                   id.vars = colnames(beta_dist_phage06_matrix)[1])
+colnames(beta_dist_phage06_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage06_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage06_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage06_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage06_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage06_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage06_matrix_long$time1 - beta_dist_phage06_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage06_matrix_long$z <-
+  log(1 - beta_dist_phage06_matrix_long$beta_dis)
+
+#linear model is gets angry about infinite values
+beta_dist_phage06_matrix_long[is.na(beta_dist_phage06_matrix_long) |
+                                beta_dist_phage06_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage06 <-
+  lm(beta_dist_phage06_matrix_long$z ~ beta_dist_phage06_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage06)
+resid(linearmodel_beta_phage06)
+AIC(linearmodel_beta_phage06)
+BIC(linearmodel_beta_phage06)
+
+x <- (beta_dist_phage06_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.1710), add=TRUE)
+
+beta_dist_phage06_plot <-
+  ggplot(beta_dist_phage06_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.1710,
+    slope =  -0.7870,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P06)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5F <- beta_dist_phage06_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5F
+
+#Bacteria participant 06
+bact_otu06 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571180",
+      "SRR14571181",
+      "SRR14571183",
+      "SRR14571184",
+      "SRR14571185",
+      "SRR14571186"
+    )
+  )
+bact_otu06 <- as.data.frame(bact_otu06)
+bact_otu06.1 <- bact_otu06 [-1]
+row.names(bact_otu06.1) <- bact_otu06$...1
+sapply(bact_otu06.1, class)
+bact_otu06.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.06 <-
+  avgdist(
+    bact_otu06.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.06 <-
+  as.matrix(median.avg.dist.bact.bray.06)
+
+PCOA.bact06 <- pcoa(median.avg.dist.bact.bray.06)
+biplot.pcoa(PCOA.bact06)
+median.avg.dist.bact.bray.06
+
+beta_dist_bact06_matrix <- as.matrix(median.avg.dist.bact.bray.06)
+beta_dist_bact06_matrix[lower.tri(beta_dist_bact06_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact06_matrix <- as.data.frame(beta_dist_bact06_matrix)
+beta_dist_bact06_matrix <-
+  cbind(row.names(beta_dist_bact06_matrix), beta_dist_bact06_matrix)
+beta_dist_bact06_matrix <- as.data.table(beta_dist_bact06_matrix)
+beta_dist_bact06_matrix_long <-
+  data.table::melt(beta_dist_bact06_matrix, id.vars = colnames(beta_dist_bact06_matrix)[1])
+colnames(beta_dist_bact06_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact06_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact06_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact06_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact06_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact06_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact06_matrix_long$time1 - beta_dist_bact06_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact06_matrix_long$z <-
+  log(1 - beta_dist_bact06_matrix_long$beta_dis)
+
+linearmodel_beta_bact06 <-
+  lm(beta_dist_bact06_matrix_long$z ~ beta_dist_bact06_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact06)
+resid(linearmodel_beta_bact06)
+AIC(linearmodel_beta_bact06)
+BIC(linearmodel_beta_bact06)
+
+x <- (beta_dist_bact06_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.05602), add=TRUE)
+
+beta_dist_bact06_plot <-
+  ggplot(beta_dist_bact06_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.05602,
+    slope = -0.18918,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P06)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5F <- beta_dist_bact06_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5F
+
+#Phage participant 07
+phage_otu07 <- vOTU_vlp %>%
+  rstatix::filter(...1 %in% c("SRR19843640",
+                              "SRR19843641",
+                              "SRR19843643",
+                              "SRR19843644"))
+phage_otu07 <- as.data.frame(phage_otu07)
+phage_otu07.1 <- phage_otu07 [-1]
+row.names(phage_otu07.1) <- phage_otu07$...1
+sapply(phage_otu07.1, class)
+phage_otu07.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.07 <-
+  avgdist(
+    phage_otu07.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.07 <-
+  as.matrix(median.avg.dist.phage.bray.07)
+
+PCOA.phage07 <- pcoa(median.avg.dist.phage.bray.07)
+biplot.pcoa(PCOA.phage07)
+median.avg.dist.phage.bray.07
+
+beta_dist_phage07_matrix <- as.matrix(median.avg.dist.phage.bray.07)
+beta_dist_phage07_matrix[lower.tri(beta_dist_phage07_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage07_matrix <- as.data.frame(beta_dist_phage07_matrix)
+beta_dist_phage07_matrix <-
+  cbind(row.names(beta_dist_phage07_matrix),
+        beta_dist_phage07_matrix)
+beta_dist_phage07_matrix <- as.data.table(beta_dist_phage07_matrix)
+beta_dist_phage07_matrix_long <-
+  data.table::melt(beta_dist_phage07_matrix,
+                   id.vars = colnames(beta_dist_phage07_matrix)[1])
+colnames(beta_dist_phage07_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage07_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage07_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage07_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage07_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage07_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage07_matrix_long$time1 - beta_dist_phage07_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage07_matrix_long$z <-
+  log(1 - beta_dist_phage07_matrix_long$beta_dis)
+
+#linear model is gets angry about infinite values
+beta_dist_phage07_matrix_long[is.na(beta_dist_phage07_matrix_long) |
+                                beta_dist_phage07_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage07 <-
+  lm(beta_dist_phage07_matrix_long$z ~ beta_dist_phage07_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage07)
+resid(linearmodel_beta_phage07)
+AIC(linearmodel_beta_phage07)
+BIC(linearmodel_beta_phage07)
+
+x <- (beta_dist_phage07_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.2278), add=TRUE)
+
+beta_dist_phage07_plot <-
+  ggplot(beta_dist_phage07_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.2278,
+    slope =  -1.0653,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P07)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5G <- beta_dist_phage07_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5G
+
+#Bacteria participant 07
+bact_otu07 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571187",
+      "SRR14571188",
+      "SRR14571191",
+      "SRR14571192",
+      "SRR14571212"
+    )
+  )
+bact_otu07 <- as.data.frame(bact_otu07)
+bact_otu07.1 <- bact_otu07 [-1]
+row.names(bact_otu07.1) <- bact_otu07$...1
+sapply(bact_otu07.1, class)
+bact_otu07.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.07 <-
+  avgdist(
+    bact_otu07.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.07 <-
+  as.matrix(median.avg.dist.bact.bray.07)
+
+PCOA.bact07 <- pcoa(median.avg.dist.bact.bray.07)
+biplot.pcoa(PCOA.bact07)
+median.avg.dist.bact.bray.07
+
+beta_dist_bact07_matrix <- as.matrix(median.avg.dist.bact.bray.07)
+beta_dist_bact07_matrix[lower.tri(beta_dist_bact07_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact07_matrix <- as.data.frame(beta_dist_bact07_matrix)
+beta_dist_bact07_matrix <-
+  cbind(row.names(beta_dist_bact07_matrix), beta_dist_bact07_matrix)
+beta_dist_bact07_matrix <- as.data.table(beta_dist_bact07_matrix)
+beta_dist_bact07_matrix_long <-
+  data.table::melt(beta_dist_bact07_matrix, id.vars = colnames(beta_dist_bact07_matrix)[1])
+colnames(beta_dist_bact07_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact07_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact07_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact07_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact07_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact07_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact07_matrix_long$time1 - beta_dist_bact07_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact07_matrix_long$z <-
+  log(1 - beta_dist_bact07_matrix_long$beta_dis)
+
+linearmodel_beta_bact07 <-
+  lm(beta_dist_bact07_matrix_long$z ~ beta_dist_bact07_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact07)
+resid(linearmodel_beta_bact07)
+AIC(linearmodel_beta_bact07)
+BIC(linearmodel_beta_bact07)
+
+x <- (beta_dist_bact07_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.011), add=TRUE)
+
+beta_dist_bact07_plot <-
+  ggplot(beta_dist_bact07_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.01107,
+    slope = -0.06648,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P07)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5G <- beta_dist_bact07_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5G
+
+#Phage participant 08
+phage_otu08 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843630",
+      "SRR19843631",
+      "SRR19843632",
+      "SRR19843633",
+      "SRR19843634",
+      "SRR19843635",
+      "SRR19843637",
+      "SRR19843638"
+    )
+  )
+
+phage_otu08 <- as.data.frame(phage_otu08)
+phage_otu08.1 <- phage_otu08[-1]
+row.names(phage_otu08.1) <- phage_otu08$...1
+sapply(phage_otu08.1, class)
+phage_otu08.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.08 <-
+  avgdist(
+    phage_otu08.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.08 <-
+  as.matrix(median.avg.dist.phage.bray.08)
+
+PCOA.phage08 <- pcoa(median.avg.dist.phage.bray.08)
+biplot.pcoa(PCOA.phage08)
+median.avg.dist.phage.bray.08
+
+beta_dist_phage08_matrix <- as.matrix(median.avg.dist.phage.bray.08)
+beta_dist_phage08_matrix[lower.tri(beta_dist_phage08_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage08_matrix <- as.data.frame(beta_dist_phage08_matrix)
+beta_dist_phage08_matrix <-
+  cbind(row.names(beta_dist_phage08_matrix),
+        beta_dist_phage08_matrix)
+beta_dist_phage08_matrix <- as.data.table(beta_dist_phage08_matrix)
+beta_dist_phage08_matrix_long <-
+  data.table::melt(beta_dist_phage08_matrix,
+                   id.vars = colnames(beta_dist_phage08_matrix)[1])
+colnames(beta_dist_phage08_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage08_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage08_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage08_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage08_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage08_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage08_matrix_long$time1 - beta_dist_phage08_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage08_matrix_long$z <-
+  log(1 - beta_dist_phage08_matrix_long$beta_dis)
+
+beta_dist_phage08_matrix_long[is.na(beta_dist_phage08_matrix_long) |
+                                beta_dist_phage08_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage08 <-
+  lm(beta_dist_phage08_matrix_long$z ~ beta_dist_phage08_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage08)
+resid(linearmodel_beta_phage08)
+AIC(linearmodel_beta_phage08)
+BIC(linearmodel_beta_phage08)
+
+x <- (beta_dist_phage08_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.4965), add=TRUE)
+
+beta_dist_phage08_plot <-
+  ggplot(beta_dist_phage08_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.4965,
+    slope = -1.1785,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P08)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5H <- beta_dist_phage08_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5H
+
+#Bacteria for participant 08
+bact_otu08 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571195",
+      "SRR14571196",
+      "SRR14571197",
+      "SRR14571198",
+      "SRR14571207",
+      "SRR14571209",
+      "SRR14571210",
+      "SRR14571211"
+    )
+  )
+bact_otu08 <- as.data.frame(bact_otu08)
+bact_otu08.1 <- bact_otu08 [-1]
+row.names(bact_otu08.1) <- bact_otu08$...1
+sapply(bact_otu08.1, class)
+bact_otu08.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.08 <-
+  avgdist(
+    bact_otu08.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.08 <-
+  as.matrix(median.avg.dist.bact.bray.08)
+
+PCOA.bact08 <- pcoa(median.avg.dist.bact.bray.08)
+biplot.pcoa(PCOA.bact08)
+median.avg.dist.bact.bray.08
+
+beta_dist_bact08_matrix <- as.matrix(median.avg.dist.bact.bray.08)
+beta_dist_bact08_matrix[lower.tri(beta_dist_bact08_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact08_matrix <- as.data.frame(beta_dist_bact08_matrix)
+beta_dist_bact08_matrix <-
+  cbind(row.names(beta_dist_bact08_matrix), beta_dist_bact08_matrix)
+beta_dist_bact08_matrix <- as.data.table(beta_dist_bact08_matrix)
+beta_dist_bact08_matrix_long <-
+  data.table::melt(beta_dist_bact08_matrix, id.vars = colnames(beta_dist_bact08_matrix)[1])
+colnames(beta_dist_bact08_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact08_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact08_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact08_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact08_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact08_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact08_matrix_long$time1 - beta_dist_bact08_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact08_matrix_long$z <-
+  log(1 - beta_dist_bact08_matrix_long$beta_dis)
+
+linearmodel_beta_bact08 <-
+  lm(beta_dist_bact08_matrix_long$z ~ beta_dist_bact08_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact08)
+resid(linearmodel_beta_bact08)
+AIC(linearmodel_beta_bact08)
+BIC(linearmodel_beta_bact08)
+
+x <- (beta_dist_bact08_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.017271), add=TRUE)
+
+beta_dist_bact08_plot <-
+  ggplot(beta_dist_bact08_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.017271,
+    slope = -0.023239,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P08)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5H <- beta_dist_bact08_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5H
+
+#Phage participant 09
+phage_otu09 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843566",
+      "SRR19843568",
+      "SRR19843569",
+      "SRR19843570",
+      "SRR19843629"
+    )
+  )
+
+phage_otu09 <- as.data.frame(phage_otu09)
+phage_otu09.1 <- phage_otu09[-1]
+row.names(phage_otu09.1) <- phage_otu09$...1
+sapply(phage_otu09.1, class)
+phage_otu09.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.09 <-
+  avgdist(
+    phage_otu09.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.09 <-
+  as.matrix(median.avg.dist.phage.bray.09)
+
+PCOA.phage09 <- pcoa(median.avg.dist.phage.bray.09)
+biplot.pcoa(PCOA.phage09)
+median.avg.dist.phage.bray.09
+
+beta_dist_phage09_matrix <- as.matrix(median.avg.dist.phage.bray.09)
+beta_dist_phage09_matrix[lower.tri(beta_dist_phage09_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage09_matrix <- as.data.frame(beta_dist_phage09_matrix)
+beta_dist_phage09_matrix <-
+  cbind(row.names(beta_dist_phage09_matrix),
+        beta_dist_phage09_matrix)
+beta_dist_phage09_matrix <- as.data.table(beta_dist_phage09_matrix)
+beta_dist_phage09_matrix_long <-
+  data.table::melt(beta_dist_phage09_matrix,
+                   id.vars = colnames(beta_dist_phage09_matrix)[1])
+colnames(beta_dist_phage09_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage09_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage09_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage09_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage09_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage09_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage09_matrix_long$time1 - beta_dist_phage09_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage09_matrix_long$z <-
+  log(1 - beta_dist_phage09_matrix_long$beta_dis)
+
+beta_dist_phage09_matrix_long[is.na(beta_dist_phage09_matrix_long) |
+                                beta_dist_phage09_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage09 <-
+  lm(beta_dist_phage09_matrix_long$z ~ beta_dist_phage09_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage09)
+resid(linearmodel_beta_phage09)
+AIC(linearmodel_beta_phage09)
+BIC(linearmodel_beta_phage09)
+
+x <- (beta_dist_phage09_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.2385), add=TRUE)
+
+beta_dist_phage09_plot <-
+  ggplot(beta_dist_phage09_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.2385,
+    slope = -2.0437,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P09)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+pPhage09 <- beta_dist_phage09_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+pPhage09
+
+#Bacteria for participant 09
+bact_otu09 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571201",
+      "SRR14571202",
+      "SRR14571203",
+      "SRR14571204",
+      "SRR14571205",
+      "SRR14571206"
+    )
+  )
+bact_otu09 <- as.data.frame(bact_otu09)
+bact_otu09.1 <- bact_otu09 [-1]
+row.names(bact_otu09.1) <- bact_otu09$...1
+sapply(bact_otu09.1, class)
+bact_otu09.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.09 <-
+  avgdist(
+    bact_otu09.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.09 <-
+  as.matrix(median.avg.dist.bact.bray.09)
+
+PCOA.bact09 <- pcoa(median.avg.dist.bact.bray.09)
+biplot.pcoa(PCOA.bact09)
+median.avg.dist.bact.bray.09
+
+beta_dist_bact09_matrix <- as.matrix(median.avg.dist.bact.bray.09)
+beta_dist_bact09_matrix[lower.tri(beta_dist_bact09_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact09_matrix <- as.data.frame(beta_dist_bact09_matrix)
+beta_dist_bact09_matrix <-
+  cbind(row.names(beta_dist_bact09_matrix), beta_dist_bact09_matrix)
+beta_dist_bact09_matrix <- as.data.table(beta_dist_bact09_matrix)
+beta_dist_bact09_matrix_long <-
+  data.table::melt(beta_dist_bact09_matrix, id.vars = colnames(beta_dist_bact09_matrix)[1])
+colnames(beta_dist_bact09_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact09_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact09_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact09_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact09_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact09_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact09_matrix_long$time1 - beta_dist_bact09_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact09_matrix_long$z <-
+  log(1 - beta_dist_bact09_matrix_long$beta_dis)
+
+linearmodel_beta_bact09 <-
+  lm(beta_dist_bact09_matrix_long$z ~ beta_dist_bact09_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact09)
+resid(linearmodel_beta_bact09)
+AIC(linearmodel_beta_bact09)
+BIC(linearmodel_beta_bact09)
+
+x <- (beta_dist_bact09_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.001859), add=TRUE)
+
+beta_dist_bact09_plot <-
+  ggplot(beta_dist_bact09_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = 0.001859,
+    slope = -0.087601,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P09)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5I <- beta_dist_bact09_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5I
+
+#Phage participant 10
+phage_otu10 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843559",
+      "SRR19843561",
+      "SRR19843562",
+      "SRR19843563",
+      "SRR19843565"
+    )
+  )
+
+phage_otu10 <- as.data.frame(phage_otu10)
+phage_otu10.1 <- phage_otu10[-1]
+row.names(phage_otu10.1) <- phage_otu10$...1
+sapply(phage_otu10.1, class)
+phage_otu10.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.10 <-
+  avgdist(
+    phage_otu10.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.10 <-
+  as.matrix(median.avg.dist.phage.bray.10)
+
+PCOA.phage10 <- pcoa(median.avg.dist.phage.bray.10)
+biplot.pcoa(PCOA.phage10)
+median.avg.dist.phage.bray.10
+
+beta_dist_phage10_matrix <- as.matrix(median.avg.dist.phage.bray.10)
+beta_dist_phage10_matrix[lower.tri(beta_dist_phage10_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage10_matrix <- as.data.frame(beta_dist_phage10_matrix)
+beta_dist_phage10_matrix <-
+  cbind(row.names(beta_dist_phage10_matrix),
+        beta_dist_phage10_matrix)
+beta_dist_phage10_matrix <- as.data.table(beta_dist_phage10_matrix)
+beta_dist_phage10_matrix_long <-
+  data.table::melt(beta_dist_phage10_matrix,
+                   id.vars = colnames(beta_dist_phage10_matrix)[1])
+colnames(beta_dist_phage10_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage10_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage10_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage10_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage10_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage10_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage10_matrix_long$time1 - beta_dist_phage10_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage10_matrix_long$z <-
+  log(1 - beta_dist_phage10_matrix_long$beta_dis)
+
+beta_dist_phage10_matrix_long[is.na(beta_dist_phage10_matrix_long) |
+                                beta_dist_phage10_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage10 <-
+  lm(beta_dist_phage10_matrix_long$z ~ beta_dist_phage10_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage10)
+resid(linearmodel_beta_phage10)
+AIC(linearmodel_beta_phage10)
+BIC(linearmodel_beta_phage10)
+
+x <- (beta_dist_phage10_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.1619), add=TRUE)
+
+beta_dist_phage10_plot <-
+  ggplot(beta_dist_phage10_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.1619,
+    slope = -1.6919,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P10)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5J <- beta_dist_phage10_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5J
+
+#Bacteria for participant 10
+bact_otu10 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571269",
+      "SRR14571270",
+      "SRR14571271",
+      "SRR14571279",
+      "SRR14571280"
+    )
+  )
+bact_otu10 <- as.data.frame(bact_otu10)
+bact_otu10.1 <- bact_otu10 [-1]
+row.names(bact_otu10.1) <- bact_otu10$...1
+sapply(bact_otu10.1, class)
+bact_otu10.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.10 <-
+  avgdist(
+    bact_otu10.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.10 <-
+  as.matrix(median.avg.dist.bact.bray.10)
+
+PCOA.bact10 <- pcoa(median.avg.dist.bact.bray.10)
+biplot.pcoa(PCOA.bact10)
+median.avg.dist.bact.bray.10
+
+beta_dist_bact10_matrix <- as.matrix(median.avg.dist.bact.bray.10)
+beta_dist_bact10_matrix[lower.tri(beta_dist_bact10_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact10_matrix <- as.data.frame(beta_dist_bact10_matrix)
+beta_dist_bact10_matrix <-
+  cbind(row.names(beta_dist_bact10_matrix), beta_dist_bact10_matrix)
+beta_dist_bact10_matrix <- as.data.table(beta_dist_bact10_matrix)
+beta_dist_bact10_matrix_long <-
+  data.table::melt(beta_dist_bact10_matrix, id.vars = colnames(beta_dist_bact10_matrix)[1])
+colnames(beta_dist_bact10_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact10_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact10_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact10_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact10_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact10_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact10_matrix_long$time1 - beta_dist_bact10_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact10_matrix_long$z <-
+  log(1 - beta_dist_bact10_matrix_long$beta_dis)
+
+linearmodel_beta_bact10 <-
+  lm(beta_dist_bact10_matrix_long$z ~ beta_dist_bact10_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact10)
+resid(linearmodel_beta_bact10)
+AIC(linearmodel_beta_bact10)
+BIC(linearmodel_beta_bact10)
+
+x <- (beta_dist_bact10_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.01152), add=TRUE)
+
+beta_dist_bact10_plot <-
+  ggplot(beta_dist_bact10_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.01152,
+    slope = -0.04938,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P10)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5J <- beta_dist_bact10_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5J
+
+#Phage participant 11
+phage_otu11 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843552",
+      "SRR19843553",
+      "SRR19843554",
+      "SRR19843555",
+      "SRR19843557",
+      "SRR19843558"
+    )
+  )
+
+phage_otu11 <- as.data.frame(phage_otu11)
+phage_otu11.1 <- phage_otu11[-1]
+row.names(phage_otu11.1) <- phage_otu11$...1
+sapply(phage_otu11.1, class)
+phage_otu11.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.11 <-
+  avgdist(
+    phage_otu11.1,
+    sample = 1,
+    iterations = 100,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.11 <-
+  as.matrix(median.avg.dist.phage.bray.11)
+
+PCOA.phage11 <- pcoa(median.avg.dist.phage.bray.11)
+biplot.pcoa(PCOA.phage11)
+median.avg.dist.phage.bray.11
+
+beta_dist_phage11_matrix <- as.matrix(median.avg.dist.phage.bray.11)
+beta_dist_phage11_matrix[lower.tri(beta_dist_phage11_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage11_matrix <- as.data.frame(beta_dist_phage11_matrix)
+beta_dist_phage11_matrix <-
+  cbind(row.names(beta_dist_phage11_matrix),
+        beta_dist_phage11_matrix)
+beta_dist_phage11_matrix <- as.data.table(beta_dist_phage11_matrix)
+beta_dist_phage11_matrix_long <-
+  data.table::melt(beta_dist_phage11_matrix,
+                   id.vars = colnames(beta_dist_phage11_matrix)[1])
+colnames(beta_dist_phage11_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage11_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage11_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage11_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage11_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage11_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage11_matrix_long$time1 - beta_dist_phage11_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage11_matrix_long$z <-
+  log(1 - beta_dist_phage11_matrix_long$beta_dis)
+
+beta_dist_phage11_matrix_long[is.na(beta_dist_phage11_matrix_long) |
+                                beta_dist_phage11_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage11 <-
+  lm(beta_dist_phage11_matrix_long$z ~ beta_dist_phage11_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage11)
+resid(linearmodel_beta_phage11)
+AIC(linearmodel_beta_phage11)
+BIC(linearmodel_beta_phage11)
+
+x <- (beta_dist_phage11_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-2.1294), add=TRUE)
+
+#Too few samples to plot/perform regression analysis
+beta_dist_phage11_plot <-
+  ggplot(beta_dist_phage11_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -2.1294,
+    slope = -0.7301,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P11)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+pPhage11 <- beta_dist_phage11_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+pPhage11
+
+#Bacteria for participant 11
+bact_otu11 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571265",
+      "SRR14571266",
+      "SRR14571267",
+      "SRR14571284",
+      "SRR14571285"
+    )
+  )
+bact_otu11 <- as.data.frame(bact_otu11)
+bact_otu11.1 <- bact_otu11 [-1]
+row.names(bact_otu11.1) <- bact_otu11$...1
+sapply(bact_otu11.1, class)
+bact_otu11.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.11 <-
+  avgdist(
+    bact_otu11.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.11 <-
+  as.matrix(median.avg.dist.bact.bray.11)
+
+PCOA.bact11 <- pcoa(median.avg.dist.bact.bray.11)
+biplot.pcoa(PCOA.bact11)
+median.avg.dist.bact.bray.11
+
+beta_dist_bact11_matrix <- as.matrix(median.avg.dist.bact.bray.11)
+beta_dist_bact11_matrix[lower.tri(beta_dist_bact11_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact11_matrix <- as.data.frame(beta_dist_bact11_matrix)
+beta_dist_bact11_matrix <-
+  cbind(row.names(beta_dist_bact11_matrix), beta_dist_bact11_matrix)
+beta_dist_bact11_matrix <- as.data.table(beta_dist_bact11_matrix)
+beta_dist_bact11_matrix_long <-
+  data.table::melt(beta_dist_bact11_matrix, id.vars = colnames(beta_dist_bact11_matrix)[1])
+colnames(beta_dist_bact11_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact11_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact11_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact11_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact11_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact11_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact11_matrix_long$time1 - beta_dist_bact11_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact11_matrix_long$z <-
+  log(1 - beta_dist_bact11_matrix_long$beta_dis)
+
+linearmodel_beta_bact11 <-
+  lm(beta_dist_bact11_matrix_long$z ~ beta_dist_bact11_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact11)
+resid(linearmodel_beta_bact11)
+AIC(linearmodel_beta_bact11)
+BIC(linearmodel_beta_bact11)
+
+x <- (beta_dist_bact11_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,0.00200), add=TRUE)
+
+beta_dist_bact11_plot <-
+  ggplot(beta_dist_bact11_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept =  0.00200,
+    slope = -0.08229,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P11)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5K <- beta_dist_bact11_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5K
+
+#Phage participant 13
+phage_otu13 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843539",
+      "SRR19843540",
+      "SRR19843541",
+      "SRR19843542",
+      "SRR19843543",
+      "SRR19843544",
+      "SRR19843628"
+    )
+  )
+
+phage_otu13 <- as.data.frame(phage_otu13)
+phage_otu13.1 <- phage_otu13[-1]
+row.names(phage_otu13.1) <- phage_otu13$...1
+sapply(phage_otu13.1, class)
+phage_otu13.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.13 <-
+  avgdist(
+    phage_otu13.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.13 <-
+  as.matrix(median.avg.dist.phage.bray.13)
+
+PCOA.phage13 <- pcoa(median.avg.dist.phage.bray.13)
+biplot.pcoa(PCOA.phage13)
+median.avg.dist.phage.bray.13
+
+beta_dist_phage13_matrix <- as.matrix(median.avg.dist.phage.bray.13)
+beta_dist_phage13_matrix[lower.tri(beta_dist_phage13_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage13_matrix <- as.data.frame(beta_dist_phage13_matrix)
+beta_dist_phage13_matrix <-
+  cbind(row.names(beta_dist_phage13_matrix),
+        beta_dist_phage13_matrix)
+beta_dist_phage13_matrix <- as.data.table(beta_dist_phage13_matrix)
+beta_dist_phage13_matrix_long <-
+  data.table::melt(beta_dist_phage13_matrix,
+                   id.vars = colnames(beta_dist_phage13_matrix)[1])
+colnames(beta_dist_phage13_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage13_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage13_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage13_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage13_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage13_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage13_matrix_long$time1 - beta_dist_phage13_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage13_matrix_long$z <-
+  log(1 - beta_dist_phage13_matrix_long$beta_dis)
+
+beta_dist_phage13_matrix_long[is.na(beta_dist_phage13_matrix_long) |
+                                beta_dist_phage13_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage13 <-
+  lm(beta_dist_phage13_matrix_long$z ~ beta_dist_phage13_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage13)
+resid(linearmodel_beta_phage13)
+AIC(linearmodel_beta_phage13)
+BIC(linearmodel_beta_phage13)
+
+x <- (beta_dist_phage13_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,0.00200), add=TRUE)
+
+beta_dist_phage13_plot <-
+  ggplot(beta_dist_phage13_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = ,
+    slope = ,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P13)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+pPhage13 <- beta_dist_phage13_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = -5,
+    parse = TRUE,
+    size = 2.4
+  ) +
+  geom_point()
+
+pPhage13
+
+#Bacteria for participant 13
+bact_otu13 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571254",
+      "SRR14571255",
+      "SRR14571256",
+      "SRR14571257",
+      "SRR14571258",
+      "SRR14571291",
+      "SRR14571293"
+    )
+  )
+bact_otu13 <- as.data.frame(bact_otu13)
+bact_otu13.1 <- bact_otu13 [-1]
+row.names(bact_otu13.1) <- bact_otu13$...1
+sapply(bact_otu13.1, class)
+bact_otu13.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.13 <-
+  avgdist(
+    bact_otu13.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.13 <-
+  as.matrix(median.avg.dist.bact.bray.13)
+
+PCOA.bact13 <- pcoa(median.avg.dist.bact.bray.13)
+biplot.pcoa(PCOA.bact13)
+median.avg.dist.bact.bray.13
+
+beta_dist_bact13_matrix <- as.matrix(median.avg.dist.bact.bray.13)
+beta_dist_bact13_matrix[lower.tri(beta_dist_bact13_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact13_matrix <- as.data.frame(beta_dist_bact13_matrix)
+beta_dist_bact13_matrix <-
+  cbind(row.names(beta_dist_bact13_matrix), beta_dist_bact13_matrix)
+beta_dist_bact13_matrix <- as.data.table(beta_dist_bact13_matrix)
+beta_dist_bact13_matrix_long <-
+  data.table::melt(beta_dist_bact13_matrix, id.vars = colnames(beta_dist_bact13_matrix)[1])
+colnames(beta_dist_bact13_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact13_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact13_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact13_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact13_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact13_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact13_matrix_long$time1 - beta_dist_bact13_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact13_matrix_long$z <-
+  log(1 - beta_dist_bact13_matrix_long$beta_dis)
+
+linearmodel_beta_bact13 <-
+  lm(beta_dist_bact13_matrix_long$z ~ beta_dist_bact13_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact13)
+resid(linearmodel_beta_bact13)
+AIC(linearmodel_beta_bact13)
+BIC(linearmodel_beta_bact13)
+
+x <- (beta_dist_bact13_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.013999), add=TRUE)
+
+beta_dist_bact13_plot <-
+  ggplot(beta_dist_bact13_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.013999,
+    slope = -0.047598,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P13)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5L <- beta_dist_bact13_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5L
+
+#Phage participant 26
+phage_otu26 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843677",
+      "SRR19843679",
+      "SRR19843680",
+      "SRR19843681",
+      "SRR19843682",
+      "SRR19843684",
+      "SRR19843685"
+    )
+  )
+phage_otu26 <- as.data.frame(phage_otu26)
+phage_otu26.1 <- phage_otu26 [-1]
+row.names(phage_otu26.1) <- phage_otu26$...1
+sapply(phage_otu26.1, class)
+phage_otu26.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.26 <-
+  avgdist(
+    phage_otu26.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.26 <-
+  as.matrix(median.avg.dist.phage.bray.26)
+
+PCOA.phage26 <- pcoa(median.avg.dist.phage.bray.26)
+biplot.pcoa(PCOA.phage26)
+median.avg.dist.phage.bray.26
+
+beta_dist_phage26_matrix <- as.matrix(median.avg.dist.phage.bray.26)
+beta_dist_phage26_matrix[lower.tri(beta_dist_phage26_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage26_matrix <- as.data.frame(beta_dist_phage26_matrix)
+beta_dist_phage26_matrix <-
+  cbind(row.names(beta_dist_phage26_matrix),
+        beta_dist_phage26_matrix)
+beta_dist_phage26_matrix <- as.data.table(beta_dist_phage26_matrix)
+beta_dist_phage26_matrix_long <-
+  data.table::melt(beta_dist_phage26_matrix,
+                   id.vars = colnames(beta_dist_phage26_matrix)[1])
+colnames(beta_dist_phage26_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage26_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage26_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage26_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage26_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage26_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage26_matrix_long$time1 - beta_dist_phage26_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage26_matrix_long$z <-
+  log(1 - beta_dist_phage26_matrix_long$beta_dis)
+
+beta_dist_phage26_matrix_long[is.na(beta_dist_phage26_matrix_long) |
+                                beta_dist_phage26_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage26 <-
+  lm(beta_dist_phage26_matrix_long$z ~ beta_dist_phage26_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage26)
+resid(linearmodel_beta_phage26)
+AIC(linearmodel_beta_phage26)
+BIC(linearmodel_beta_phage26)
+
+x <- (beta_dist_phage26_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,-0.4266), add=TRUE)
+
+beta_dist_phage26_plot <-
+  ggplot(beta_dist_phage26_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.4266,
+    slope = -1.1940,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P26)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5K <- beta_dist_phage26_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5K
+
+#Bacteria participant 26
+bact_otu26 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571028",
+      "SRR14571029",
+      "SRR14571030",
+      "SRR14571032",
+      "SRR14571033",
+      "SRR14571034",
+      "SRR14571035"
+    )
+  )
+bact_otu26 <- as.data.frame(bact_otu26)
+bact_otu26.1 <- bact_otu26 [-1]
+row.names(bact_otu26.1) <- bact_otu26$...1
+sapply(bact_otu26.1, class)
+bact_otu26.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.26 <-
+  avgdist(
+    bact_otu26.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.26 <-
+  as.matrix(median.avg.dist.bact.bray.26)
+
+PCOA.bact26 <- pcoa(median.avg.dist.bact.bray.26)
+biplot.pcoa(PCOA.bact26)
+median.avg.dist.bact.bray.26
+
+beta_dist_bact26_matrix <- as.matrix(median.avg.dist.bact.bray.26)
+beta_dist_bact26_matrix[lower.tri(beta_dist_bact26_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact26_matrix <- as.data.frame(beta_dist_bact26_matrix)
+beta_dist_bact26_matrix <-
+  cbind(row.names(beta_dist_bact26_matrix), beta_dist_bact26_matrix)
+beta_dist_bact26_matrix <- as.data.table(beta_dist_bact26_matrix)
+beta_dist_bact26_matrix_long <-
+  data.table::melt(beta_dist_bact26_matrix, id.vars = colnames(beta_dist_bact26_matrix)[1])
+colnames(beta_dist_bact26_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact26_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact26_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact26_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact26_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact26_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact26_matrix_long$time1 - beta_dist_bact26_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact26_matrix_long$z <-
+  log(1 - beta_dist_bact26_matrix_long$beta_dis)
+
+linearmodel_beta_bact26 <-
+  lm(beta_dist_bact26_matrix_long$z ~ beta_dist_bact26_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact26)
+resid(linearmodel_beta_bact26)
+AIC(linearmodel_beta_bact26)
+BIC(linearmodel_beta_bact26)
+
+x <- (beta_dist_bact26_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x,0.0006482), add=TRUE)
+
+beta_dist_bact26_plot <-
+  ggplot(beta_dist_bact26_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = 0.0006482,
+    slope = -0.0660493,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P26)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5M <- beta_dist_bact26_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5M
+
+#Phage participant 29
+phage_otu29 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843661",
+      "SRR19843662",
+      "SRR19843663",
+      "SRR19843664",
+      "SRR19843665",
+      "SRR19843666",
+      "SRR19843668",
+      "SRR19843669"
+    )
+  )
+phage_otu29 <- as.data.frame(phage_otu29)
+phage_otu29.1 <- phage_otu29 [-1]
+row.names(phage_otu29.1) <- phage_otu29$...1
+sapply(phage_otu29.1, class)
+phage_otu29.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.29 <-
+  avgdist(
+    phage_otu29.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.29 <-
+  as.matrix(median.avg.dist.phage.bray.29)
+
+PCOA.phage29 <- pcoa(median.avg.dist.phage.bray.29)
+biplot.pcoa(PCOA.phage29)
+median.avg.dist.phage.bray.29
+
+beta_dist_phage29_matrix <- as.matrix(median.avg.dist.phage.bray.29)
+beta_dist_phage29_matrix[lower.tri(beta_dist_phage29_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage29_matrix <- as.data.frame(beta_dist_phage29_matrix)
+beta_dist_phage29_matrix <-
+  cbind(row.names(beta_dist_phage29_matrix),
+        beta_dist_phage29_matrix)
+beta_dist_phage29_matrix <- as.data.table(beta_dist_phage29_matrix)
+beta_dist_phage29_matrix_long <-
+  data.table::melt(beta_dist_phage29_matrix,
+                   id.vars = colnames(beta_dist_phage29_matrix)[1])
+colnames(beta_dist_phage29_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage29_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage29_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage29_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage29_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage29_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage29_matrix_long$time1 - beta_dist_phage29_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage29_matrix_long$z <-
+  log(1 - beta_dist_phage29_matrix_long$beta_dis)
+
+beta_dist_phage29_matrix_long[is.na(beta_dist_phage29_matrix_long) |
+                                beta_dist_phage29_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage29 <-
+  lm(beta_dist_phage29_matrix_long$z ~ beta_dist_phage29_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage29)
+resid(linearmodel_beta_phage29)
+AIC(linearmodel_beta_phage29)
+BIC(linearmodel_beta_phage29)
+
+x <- (beta_dist_phage29_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, ), add=TRUE)
+
+#Too few samples to plot/perfomr regression analysis regression analysis
+beta_dist_phage29_plot <-
+  ggplot(beta_dist_phage29_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = ,
+    slope = ,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray Curtis Dissimilarity (P29)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+pPhage29 <- beta_dist_phage29_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+pPhage29
+
+#Bacteria participant 29
+bact_otu29 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571049",
+      "SRR14571050",
+      "SRR14571051",
+      "SRR14571052",
+      "SRR14571053",
+      "SRR14571054",
+      "SRR14571055",
+      "SRR14571056"
+    )
+  )
+bact_otu29 <- as.data.frame(bact_otu29)
+bact_otu29.1 <- bact_otu29 [-1]
+row.names(bact_otu29.1) <- bact_otu29$...1
+sapply(bact_otu29.1, class)
+bact_otu29.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.29 <-
+  avgdist(
+    bact_otu29.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.29 <-
+  as.matrix(median.avg.dist.bact.bray.29)
+
+PCOA.bact29 <- pcoa(median.avg.dist.bact.bray.29)
+biplot.pcoa(PCOA.bact29)
+median.avg.dist.bact.bray.29
+
+beta_dist_bact29_matrix <- as.matrix(median.avg.dist.bact.bray.29)
+beta_dist_bact29_matrix[lower.tri(beta_dist_bact29_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact29_matrix <- as.data.frame(beta_dist_bact29_matrix)
+beta_dist_bact29_matrix <-
+  cbind(row.names(beta_dist_bact29_matrix), beta_dist_bact29_matrix)
+beta_dist_bact29_matrix <- as.data.table(beta_dist_bact29_matrix)
+beta_dist_bact29_matrix_long <-
+  data.table::melt(beta_dist_bact29_matrix, id.vars = colnames(beta_dist_bact29_matrix)[1])
+colnames(beta_dist_bact29_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact29_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact29_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact29_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact29_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact29_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact29_matrix_long$time1 - beta_dist_bact29_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact29_matrix_long$z <-
+  log(1 - beta_dist_bact29_matrix_long$beta_dis)
+
+linearmodel_beta_bact29 <-
+  lm(beta_dist_bact29_matrix_long$z ~ beta_dist_bact29_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact29)
+resid(linearmodel_beta_bact29)
+AIC(linearmodel_beta_bact29)
+BIC(linearmodel_beta_bact29)
+
+x <- (beta_dist_bact29_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.014123), add=TRUE)
+
+beta_dist_bact29_plot <-
+  ggplot(beta_dist_bact29_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.014123,
+    slope = -0.067548,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray- Curtis Dissimilarity (P29)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5N <- beta_dist_bact29_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5N
+
+#Phage participant 30
+phage_otu30 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843596",
+      "SRR19843599",
+      "SRR19843600",
+      "SRR19843601",
+      "SRR19843602"
+    )
+  )
+phage_otu30 <- as.data.frame(phage_otu30)
+phage_otu30.1 <- phage_otu30 [-1]
+row.names(phage_otu30.1) <- phage_otu30$...1
+sapply(phage_otu30.1, class)
+phage_otu30.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.30 <-
+  avgdist(
+    phage_otu30.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.30 <-
+  as.matrix(median.avg.dist.phage.bray.30)
+
+PCOA.phage30 <- pcoa(median.avg.dist.phage.bray.30)
+biplot.pcoa(PCOA.phage30)
+median.avg.dist.phage.bray.30
+
+beta_dist_phage30_matrix <- as.matrix(median.avg.dist.phage.bray.30)
+beta_dist_phage30_matrix[lower.tri(beta_dist_phage30_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage30_matrix <- as.data.frame(beta_dist_phage30_matrix)
+beta_dist_phage30_matrix <-
+  cbind(row.names(beta_dist_phage30_matrix),
+        beta_dist_phage30_matrix)
+beta_dist_phage30_matrix <- as.data.table(beta_dist_phage30_matrix)
+beta_dist_phage30_matrix_long <-
+  data.table::melt(beta_dist_phage30_matrix,
+                   id.vars = colnames(beta_dist_phage30_matrix)[1])
+colnames(beta_dist_phage30_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage30_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage30_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage30_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage30_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage30_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage30_matrix_long$time1 - beta_dist_phage30_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage30_matrix_long$z <-
+  log(1 - beta_dist_phage30_matrix_long$beta_dis)
+
+beta_dist_phage30_matrix_long[is.na(beta_dist_phage30_matrix_long) |
+                                beta_dist_phage30_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage30 <-
+  lm(beta_dist_phage30_matrix_long$z ~ beta_dist_phage30_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage30)
+resid(linearmodel_beta_phage30)
+AIC(linearmodel_beta_phage30)
+BIC(linearmodel_beta_phage30)
+
+x <- (beta_dist_phage30_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.2482), add=TRUE)
+
+#Too few samples to plot/perform regression analysis on.
+beta_dist_phage30_plot <-
+  ggplot(beta_dist_phage30_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.2482,
+    slope = -1.2047,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P30)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5L <- beta_dist_phage30_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5L
+
+#Bacteria participant 30
+bact_otu30 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571060",
+      "SRR14571061",
+      "SRR14571062",
+      "SRR14571063",
+      "SRR14571064"
+    )
+  )
+bact_otu30 <- as.data.frame(bact_otu30)
+bact_otu30.1 <- bact_otu30 [-1]
+row.names(bact_otu30.1) <- bact_otu30$...1
+sapply(bact_otu30.1, class)
+bact_otu30.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.30 <-
+  avgdist(
+    bact_otu30.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.30 <-
+  as.matrix(median.avg.dist.bact.bray.30)
+
+PCOA.bact30 <- pcoa(median.avg.dist.bact.bray.30)
+biplot.pcoa(PCOA.bact30)
+median.avg.dist.bact.bray.30
+
+beta_dist_bact30_matrix <- as.matrix(median.avg.dist.bact.bray.30)
+beta_dist_bact30_matrix[lower.tri(beta_dist_bact30_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact30_matrix <- as.data.frame(beta_dist_bact30_matrix)
+beta_dist_bact30_matrix <-
+  cbind(row.names(beta_dist_bact30_matrix), beta_dist_bact30_matrix)
+beta_dist_bact30_matrix <- as.data.table(beta_dist_bact30_matrix)
+beta_dist_bact30_matrix_long <-
+  data.table::melt(beta_dist_bact30_matrix, id.vars = colnames(beta_dist_bact30_matrix)[1])
+colnames(beta_dist_bact30_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact30_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact30_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact30_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact30_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact30_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact30_matrix_long$time1 - beta_dist_bact30_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact30_matrix_long$z <-
+  log(1 - beta_dist_bact30_matrix_long$beta_dis)
+
+linearmodel_beta_bact30 <-
+  lm(beta_dist_bact30_matrix_long$z ~ beta_dist_bact30_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact30)
+resid(linearmodel_beta_bact30)
+AIC(linearmodel_beta_bact30)
+BIC(linearmodel_beta_bact30)
+
+x <- (beta_dist_bact30_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.01883), add=TRUE)
+
+beta_dist_bact30_plot <-
+  ggplot(beta_dist_bact30_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.01883,
+    slope = -0.05424,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P30)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5O <- beta_dist_bact30_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5O
+
+#Phage participant 31
+phage_otu31 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843591",
+      "SRR19843592",
+      "SRR19843593",
+      "SRR19843594",
+      "SRR19843595"
+    )
+  )
+phage_otu31 <- as.data.frame(phage_otu31)
+phage_otu31.1 <- phage_otu31 [-1]
+row.names(phage_otu31.1) <- phage_otu31$...1
+sapply(phage_otu31.1, class)
+phage_otu31.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.31 <-
+  avgdist(
+    phage_otu31.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.31 <-
+  as.matrix(median.avg.dist.phage.bray.31)
+
+PCOA.phage31 <- pcoa(median.avg.dist.phage.bray.31)
+biplot.pcoa(PCOA.phage31)
+median.avg.dist.phage.bray.31
+
+beta_dist_phage31_matrix <- as.matrix(median.avg.dist.phage.bray.31)
+beta_dist_phage31_matrix[lower.tri(beta_dist_phage31_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage31_matrix <- as.data.frame(beta_dist_phage31_matrix)
+beta_dist_phage31_matrix <-
+  cbind(row.names(beta_dist_phage31_matrix),
+        beta_dist_phage31_matrix)
+beta_dist_phage31_matrix <- as.data.table(beta_dist_phage31_matrix)
+beta_dist_phage31_matrix_long <-
+  data.table::melt(beta_dist_phage31_matrix,
+                   id.vars = colnames(beta_dist_phage31_matrix)[1])
+colnames(beta_dist_phage31_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage31_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage31_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage31_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage31_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage31_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage31_matrix_long$time1 - beta_dist_phage31_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage31_matrix_long$z <-
+  log(1 - beta_dist_phage31_matrix_long$beta_dis)
+
+beta_dist_phage31_matrix_long[is.na(beta_dist_phage31_matrix_long) |
+                                beta_dist_phage31_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage31 <-
+  lm(beta_dist_phage31_matrix_long$z ~ beta_dist_phage31_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage31)
+resid(linearmodel_beta_phage31)
+AIC(linearmodel_beta_phage31)
+BIC(linearmodel_beta_phage31)
+
+x <- (beta_dist_phage31_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.10532), add=TRUE)
+
+beta_dist_phage31_plot <-
+  ggplot(beta_dist_phage31_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.10532,
+    slope = -0.85926,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P31)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5M <- beta_dist_phage31_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5M
+
+#Bacteria participant 31
+bact_otu31 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571067",
+      "SRR14571068",
+      "SRR14571070",
+      "SRR14571071",
+      "SRR14571072"
+    )
+  )
+bact_otu31 <- as.data.frame(bact_otu31)
+bact_otu31.1 <- bact_otu31 [-1]
+row.names(bact_otu31.1) <- bact_otu31$...1
+sapply(bact_otu31.1, class)
+bact_otu31.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.31 <-
+  avgdist(
+    bact_otu31.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.31 <-
+  as.matrix(median.avg.dist.bact.bray.31)
+
+PCOA.bact31 <- pcoa(median.avg.dist.bact.bray.31)
+biplot.pcoa(PCOA.bact31)
+median.avg.dist.bact.bray.31
+
+beta_dist_bact31_matrix <- as.matrix(median.avg.dist.bact.bray.31)
+beta_dist_bact31_matrix[lower.tri(beta_dist_bact31_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact31_matrix <- as.data.frame(beta_dist_bact31_matrix)
+beta_dist_bact31_matrix <-
+  cbind(row.names(beta_dist_bact31_matrix), beta_dist_bact31_matrix)
+beta_dist_bact31_matrix <- as.data.table(beta_dist_bact31_matrix)
+beta_dist_bact31_matrix_long <-
+  data.table::melt(beta_dist_bact31_matrix, id.vars = colnames(beta_dist_bact31_matrix)[1])
+colnames(beta_dist_bact31_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact31_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact31_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact31_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact31_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact31_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact31_matrix_long$time1 - beta_dist_bact31_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact31_matrix_long$z <-
+  log(1 - beta_dist_bact31_matrix_long$beta_dis)
+
+linearmodel_beta_bact31 <-
+  lm(beta_dist_bact31_matrix_long$z ~ beta_dist_bact31_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact31)
+resid(linearmodel_beta_bact31)
+AIC(linearmodel_beta_bact31)
+BIC(linearmodel_beta_bact31)
+
+x <- (beta_dist_bact31_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.006187), add=TRUE)
+
+beta_dist_bact31_plot <-
+  ggplot(beta_dist_bact31_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.006187,
+    slope = -0.127641,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P31)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5P <- beta_dist_bact31_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5P
+
+#Phage participant 32
+phage_otu32 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843584",
+      "SRR19843585",
+      "SRR19843586",
+      "SRR19843588",
+      "SRR19843589",
+      "SRR19843590"
+    )
+  )
+phage_otu32 <- as.data.frame(phage_otu32)
+phage_otu32.1 <- phage_otu32 [-1]
+row.names(phage_otu32.1) <- phage_otu32$...1
+sapply(phage_otu32.1, class)
+phage_otu32.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.32 <-
+  avgdist(
+    phage_otu32.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.32 <-
+  as.matrix(median.avg.dist.phage.bray.32)
+
+PCOA.phage32 <- pcoa(median.avg.dist.phage.bray.32)
+biplot.pcoa(PCOA.phage32)
+median.avg.dist.phage.bray.32
+
+beta_dist_phage32_matrix <- as.matrix(median.avg.dist.phage.bray.32)
+beta_dist_phage32_matrix[lower.tri(beta_dist_phage32_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage32_matrix <- as.data.frame(beta_dist_phage32_matrix)
+beta_dist_phage32_matrix <-
+  cbind(row.names(beta_dist_phage32_matrix),
+        beta_dist_phage32_matrix)
+beta_dist_phage32_matrix <- as.data.table(beta_dist_phage32_matrix)
+beta_dist_phage32_matrix_long <-
+  data.table::melt(beta_dist_phage32_matrix,
+                   id.vars = colnames(beta_dist_phage32_matrix)[1])
+colnames(beta_dist_phage32_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage32_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage32_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage32_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage32_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage32_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage32_matrix_long$time1 - beta_dist_phage32_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage32_matrix_long$z <-
+  log(1 - beta_dist_phage32_matrix_long$beta_dis)
+
+beta_dist_phage32_matrix_long[is.na(beta_dist_phage32_matrix_long) |
+                                beta_dist_phage32_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage32 <-
+  lm(beta_dist_phage32_matrix_long$z ~ beta_dist_phage32_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage32)
+resid(linearmodel_beta_phage32)
+AIC(linearmodel_beta_phage32)
+BIC(linearmodel_beta_phage32)
+
+x <- (beta_dist_phage32_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.2815), add=TRUE)
+
+beta_dist_phage32_plot <-
+  ggplot(beta_dist_phage32_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.2815,
+    slope = -1.1755,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P32)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5N <- beta_dist_phage32_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5N
+
+#Bacteria participant 32
+bact_otu32 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571074",
+      "SRR14571075",
+      "SRR14571076",
+      "SRR14571221",
+      "SRR14571223",
+      "SRR14571224"
+    )
+  )
+bact_otu32 <- as.data.frame(bact_otu32)
+bact_otu32.1 <- bact_otu32 [-1]
+row.names(bact_otu32.1) <- bact_otu32$...1
+sapply(bact_otu32.1, class)
+bact_otu32.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.32 <-
+  avgdist(
+    bact_otu32.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.32 <-
+  as.matrix(median.avg.dist.bact.bray.32)
+
+PCOA.bact32 <- pcoa(median.avg.dist.bact.bray.32)
+biplot.pcoa(PCOA.bact32)
+median.avg.dist.bact.bray.32
+
+beta_dist_bact32_matrix <- as.matrix(median.avg.dist.bact.bray.32)
+beta_dist_bact32_matrix[lower.tri(beta_dist_bact32_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact32_matrix <- as.data.frame(beta_dist_bact32_matrix)
+beta_dist_bact32_matrix <-
+  cbind(row.names(beta_dist_bact32_matrix), beta_dist_bact32_matrix)
+beta_dist_bact32_matrix <- as.data.table(beta_dist_bact32_matrix)
+beta_dist_bact32_matrix_long <-
+  data.table::melt(beta_dist_bact32_matrix, id.vars = colnames(beta_dist_bact32_matrix)[1])
+colnames(beta_dist_bact32_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact32_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact32_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact32_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact32_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact32_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact32_matrix_long$time1 - beta_dist_bact32_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact32_matrix_long$z <-
+  log(1 - beta_dist_bact32_matrix_long$beta_dis)
+
+linearmodel_beta_bact32 <-
+  lm(beta_dist_bact32_matrix_long$z ~ beta_dist_bact32_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact32)
+resid(linearmodel_beta_bact32)
+AIC(linearmodel_beta_bact32)
+BIC(linearmodel_beta_bact32)
+
+x <- (beta_dist_bact32_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.01289), add=TRUE)
+
+beta_dist_bact32_plot <-
+  ggplot(beta_dist_bact32_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.01289,
+    slope = -0.09079,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P32)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5Q <- beta_dist_bact32_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5Q
+
+#Phage participant 33
+phage_otu33 <- vOTU_vlp %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR19843577",
+      "SRR19843579",
+      "SRR19843580",
+      "SRR19843581",
+      "SRR19843582",
+      "SRR19843583"
+    )
+  )
+phage_otu33 <- as.data.frame(phage_otu33)
+phage_otu33.1 <- phage_otu33 [-1]
+row.names(phage_otu33.1) <- phage_otu33$...1
+sapply(phage_otu33.1, class)
+phage_otu33.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.phage.bray.33 <-
+  avgdist(
+    phage_otu33.1,
+    sample = 100,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.phage.bray.33 <-
+  as.matrix(median.avg.dist.phage.bray.33)
+
+PCOA.phage33 <- pcoa(median.avg.dist.phage.bray.33)
+biplot.pcoa(PCOA.phage33)
+median.avg.dist.phage.bray.33
+
+beta_dist_phage33_matrix <- as.matrix(median.avg.dist.phage.bray.33)
+beta_dist_phage33_matrix[lower.tri(beta_dist_phage33_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_phage33_matrix <- as.data.frame(beta_dist_phage33_matrix)
+beta_dist_phage33_matrix <-
+  cbind(row.names(beta_dist_phage33_matrix),
+        beta_dist_phage33_matrix)
+beta_dist_phage33_matrix <- as.data.table(beta_dist_phage33_matrix)
+beta_dist_phage33_matrix_long <-
+  data.table::melt(beta_dist_phage33_matrix,
+                   id.vars = colnames(beta_dist_phage33_matrix)[1])
+colnames(beta_dist_phage33_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_phage33_matrix_long$time1 <-
+  metadata$day[match(beta_dist_phage33_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_phage33_matrix_long$time2 <-
+  metadata$day[match(beta_dist_phage33_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_phage33_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_phage33_matrix_long$time1 - beta_dist_phage33_matrix_long$time2
+  )
+  ))
+
+beta_dist_phage33_matrix_long$z <-
+  log(1 - beta_dist_phage33_matrix_long$beta_dis)
+
+beta_dist_phage33_matrix_long[is.na(beta_dist_phage33_matrix_long) |
+                                beta_dist_phage33_matrix_long == "-Inf"] = NA
+
+linearmodel_beta_phage33 <-
+  lm(beta_dist_phage33_matrix_long$z ~ beta_dist_phage33_matrix_long$srt_time_lag)
+summary(linearmodel_beta_phage33)
+resid(linearmodel_beta_phage33)
+AIC(linearmodel_beta_phage33)
+BIC(linearmodel_beta_phage33)
+
+x <- (beta_dist_phage33_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, -0.2573), add=TRUE)
+
+beta_dist_phage33_plot <-
+  ggplot(beta_dist_phage33_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = -0.2573,
+    slope = -1.0005,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Phage Bray-Curtis Dissimilarity (P33)') +
+  xlab(label = 'Time (Days)')
+theme(
+  axis.text.x = element_text(size = 7),
+  axis.text.y = element_text(size = 7),
+  axis.title = element_text(size = 7)
+)
+
+Figure_5O <- beta_dist_phage33_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_5O
+
+#Bacteria participant 33
+bact_otu33 <- bOTU_raw %>%
+  rstatix::filter(
+    ...1 %in% c(
+      "SRR14571079",
+      "SRR14571080",
+      "SRR14571082",
+      "SRR14571083",
+      "SRR14571219",
+      "SRR14571220"
+    )
+  )
+bact_otu33 <- as.data.frame(bact_otu33)
+bact_otu33.1 <- bact_otu33 [-1]
+row.names(bact_otu33.1) <- bact_otu33$...1
+sapply(bact_otu33.1, class)
+bact_otu33.1[1:2, 1:3]
+
+#Recalculate the distances now that the samples dates are by one individual
+median.avg.dist.bact.bray.33 <-
+  avgdist(
+    bact_otu33.1,
+    sample = 5000,
+    iterations = 1000,
+    meanfun = median,
+    dmethod = "bray"
+  )
+median.avg.dist.bact.bray.33 <-
+  as.matrix(median.avg.dist.bact.bray.33)
+
+PCOA.bact33 <- pcoa(median.avg.dist.bact.bray.33)
+biplot.pcoa(PCOA.bact33)
+median.avg.dist.bact.bray.33
+
+beta_dist_bact33_matrix <- as.matrix(median.avg.dist.bact.bray.33)
+beta_dist_bact33_matrix[lower.tri(beta_dist_bact33_matrix, diag = FALSE)] <-
+  NA
+
+beta_dist_bact33_matrix <- as.data.frame(beta_dist_bact33_matrix)
+beta_dist_bact33_matrix <-
+  cbind(row.names(beta_dist_bact33_matrix), beta_dist_bact33_matrix)
+beta_dist_bact33_matrix <- as.data.table(beta_dist_bact33_matrix)
+beta_dist_bact33_matrix_long <-
+  data.table::melt(beta_dist_bact33_matrix, id.vars = colnames(beta_dist_bact33_matrix)[1])
+colnames(beta_dist_bact33_matrix_long) <-
+  c('time1', 'time2', 'beta_dis')
+beta_dist_bact33_matrix_long$time1 <-
+  metadata$day[match(beta_dist_bact33_matrix_long$time1,
+                     metadata$SRA_run_accession)]
+beta_dist_bact33_matrix_long$time2 <-
+  metadata$day[match(beta_dist_bact33_matrix_long$time2,
+                     metadata$SRA_run_accession)]
+beta_dist_bact33_matrix_long$srt_time_lag <-
+  sqrt(abs((
+    beta_dist_bact33_matrix_long$time1 - beta_dist_bact33_matrix_long$time2
+  )
+  ))
+
+beta_dist_bact33_matrix_long$z <-
+  log(1 - beta_dist_bact33_matrix_long$beta_dis)
+
+linearmodel_beta_bact33 <-
+  lm(beta_dist_bact33_matrix_long$z ~ beta_dist_bact33_matrix_long$srt_time_lag)
+summary(linearmodel_beta_bact33)
+resid(linearmodel_beta_bact33)
+AIC(linearmodel_beta_bact33)
+BIC(linearmodel_beta_bact33)
+
+x <- (beta_dist_bact33_matrix_long$srt_time_lag)
+newfunc2 <- function(x,a){x*a}
+newFunc <- function(x,a,b){b-exp(a*x)}
+curve(newfunc2(x, 0.01018), add=TRUE)
+
+beta_dist_bact33_plot <-
+  ggplot(beta_dist_bact33_matrix_long, aes(x = srt_time_lag, y = z)) +
+  geom_point(size = 0.75) +
+  geom_jitter(width = 0.001) +
+  geom_abline(
+    intercept = 0.01018,
+    slope = -0.08189,
+    linetype = 'dashed',
+    color = '#F26766'
+  ) +
+  ylab(label = 'Bacterial Bray-Curtis Dissimilarity (P33)') +
+  xlab(label = 'Time (Days)') +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    axis.title = element_text(size = 7)
+  )
+
+Figure_S5R <- beta_dist_bact33_plot +
+  stat_poly_eq(
+    use_label(c("eq", "adj.R2", "p")),
+    label.x = 4,
+    label.y = 5,
+    parse = TRUE,
+    size = 4.5
+  ) +
+  geom_point()
+
+Figure_S5R
+
+#Combine all individual trends for phage communinties into one plot
+
+Figure_5 <- ggarrange(
+  Figure_5A,
+  Figure_5B,
+  Figure_5C,
+  Figure_5D,
+  Figure_5E,
+  Figure_5F,
+  Figure_5G,
+  Figure_5H,
+  Figure_5I,
+  Figure_5J,
+  Figure_5K,
+  Figure_5L,
+  Figure_5M,
+  Figure_5N,
+  Figure_5O,
+  widths = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5),
+  heights = c(6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6),
+  nrow = 5,
+  ncol = 3,
+  labels = c(
+    'A.',
+    'B.',
+    'C.',
+    'D.',
+    'E.',
+    'F.',
+    'G.',
+    'H.',
+    'I.',
+    'J.',
+    'K.',
+    'L.',
+    'M.',
+    'N.',
+    'O.'
+  )
+)
+
+Figure_5
+
+#Combine all individual trends for bacterial communities into one plot
+Figure_S5 <- ggarrange(
+  Figure_S5A,
+  Figure_S5B,
+  Figure_S5C,
+  Figure_S5D,
+  Figure_S5E,
+  Figure_S5F,
+  Figure_S5G,
+  Figure_S5H,
+  Figure_S5I,
+  Figure_S5J,
+  Figure_S5K,
+  Figure_S5L,
+  Figure_S5M,
+  Figure_S5N,
+  Figure_S5O,
+  Figure_S5P,
+  Figure_S5Q,
+  Figure_S5R,
+  widths = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5),
+  heights = c(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8),
+  nrow = 6,
+  ncol = 3,
+  labels = c(
+    'A.',
+    'B.',
+    'C.',
+    'D.',
+    'E.',
+    'F.',
+    'G.',
+    'H.',
+    'I.',
+    'J.',
+    'K.',
+    'L.',
+    'M.',
+    'N.',
+    'O.',
+    'P.',
+    'Q.',
+    'R.'
+  )
+)
+
+Figure_S5
+
+```
+
+
+
